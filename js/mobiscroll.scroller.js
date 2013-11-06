@@ -997,16 +997,6 @@
             wndw = $(s.context == 'body' ? window : s.context);
             doc = $(s.context)[0];
 
-            if (!s.setText) {
-                buttons.splice($.inArray('set', buttons), 1);
-            }
-            if (!s.cancelText) {
-                buttons.splice($.inArray('cancel', buttons), 1);
-            }
-            if (s.button3) {
-                buttons.splice($.inArray('set', buttons) + 1, 0, { text: s.button3Text, handler: s.button3 });
-            }
-
             that.context = wndw;
             that.live = !modal || ($.inArray('set', buttons) == -1);
             that.buttons.set = { text: s.setText, css: 'dwb-s', handler: that.select };
