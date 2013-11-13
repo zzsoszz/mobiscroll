@@ -4,32 +4,31 @@
     $.mobiscroll.classes.Scroller = function (elem, settings) {
 
         var doc,
+            currPos,
+            currWheel,
             endPos,
             lang,
+            lastPos,
             markup,
             preset,
             startPos,
             theme,
             valueText,
             wheelHeight,
-            wheelIndex, // Index of scrolled wheel
-            wheelMarkup,
+            wheelScrolled,
             wnd,
             that = this,
             e = elem,
             elm = $(e),
             s = extend({}, defaults),
             wheels = [],
-            wheelPosition = {},
-            wheelScrolled = false,
-            wheelScrolling = {},
             elmList = [],
             isInput = elm.is('input'),
-            isScrollable = true,
-            isVisible = false,
-            lockScroll = false,
-            preventShow = false,
-            preventChange = false;
+
+            isScrollable,
+            isVisible,
+            lockScroll,
+            preventChange;
 
         // Private functions
 
@@ -37,34 +36,31 @@
             var ret;
             args.push(that);
             $.each([theme, preset, settings], function (i, v) {
-                if (v && v[name]) { // Call preset event
+                if (v && v[name]) {
                     ret = v[name].apply(e, args);
                 }
             });
             return ret;
         }
 
-        function genWheelItems(i) {
-            var html = '<div class="dw-bf">',
-                l = 1,
-                w = wheels[i],
+        function genWheelItems(w, first, last) {
+            var i,
+                html = '',
                 labels = w.labels || [],
                 values = w.values,
-                keys = w.keys || values;
+                keys = w.keys || values,
+                isArray = $.isArray(values),
+                length = values.length;
 
-            $.each(values, function (j, v) {
-                if (l % 20 == 0) {
-                    html += '</div><div class="dw-bf">';
-                }
-                html += '<div role="option" class="dw-li dw-v" data-val="' + keys[j] + '"' + (labels[j] ? ' aria-label="' + labels[j] + '"' : '') + ' style="height:' + wheelHeight + 'px;top:' + (j * wheelHeight) + 'px;"><div class="dw-i">' + v + '</div></div>';
-                l++;
-            });
+            for (i = first; i <= last; i++) {
+                html += '<div role="option" class="dw-li dw-v" data-val="' + i + '"' + (labels[i] ? ' aria-label="' + labels[i] + '"' : '') + ' style="height:' + wheelHeight + 'px;"><div class="dw-i">' + (isArray ? $(values).get(i % length) : values(i)) + '</div></div>';
+            }
 
-            return html + '</div>';
+            return html;
         }
 
-        function getCurrPos(i) {
-            var target = wheelMarkup[i],
+        function getCurrPos(w) {
+            var target = w.markup[0],
                 style = window.getComputedStyle ? getComputedStyle(target) : target.style,
                 matrix;
 
@@ -82,7 +78,7 @@
             return +style.top.replace('px', '');
         }
 
-        function scroll(i, px, time, active) {
+        function scroll(w, px, time, active) {
             /*var px = (m - val) * hi,
                 style = t[0].style,
                 i;
@@ -119,9 +115,9 @@
 
             pos[index] = val;*/
 
-            var style = wheelMarkup[i].style;
+            var style = w.markup[0].style;
 
-            style[jsPrefix + 'Transition'] = 'all ' + (time || 0) + 'ms ease-out';
+            style[jsPrefix + 'Transition'] = prefix + 'transform ' + (time || 0) + 'ms ease-out';
 
             if (has3d) {
                 style[jsPrefix + 'Transform'] = 'translate3d(0,' + px + 'px,0)';
@@ -129,24 +125,50 @@
                 style.top = px + 'px';
             }
 
-            if (wheelScrolling[i]) {
-                scrollReady(i);
+            if (w.scrolling) {
+                scrollReady(w);
             }
 
             if (time !== undefined) {
-                wheelScrolling[i] = setTimeout(function () {
-                    infinite();
-                    scrollReady(i, px);
+                w.scrolling = setTimeout(function () {
+                    scrollReady(w);
                 }, time);
             }
 
-            wheelPosition[i] = px;
+            w.position = px;
         }
 
-        function scrollReady(i) {
-            clearTimeout(wheelScrolling[i]);
-            delete wheelScrolling[i];
+        function scrollReady(w) {
+            clearTimeout(w.scrolling);
+            delete w.scrolling;
             //t.closest('.dwwl').removeClass('dwa');
+        }
+
+        function readValue() {
+            that.temp = that.values ? that.values.slice(0) : s.parseValue(elm.val() || '', that);
+            setValue();
+        }
+
+        function setValue(fill, time, noscroll, temp, manual) {
+            if (isVisible && !noscroll) {
+                //scrollToPos(time, undefined, manual);
+            }
+
+            valueText = s.formatResult(that.temp);
+
+            if (!temp) {
+                that.values = that.temp.slice(0);
+                that.val = valueText;
+            }
+
+            if (fill && isInput) {
+                preventChange = true;
+                elm.val(valueText).change();
+            }
+        }
+
+        function round(val) {
+            return Math.round(val / wheelHeight) * wheelHeight;
         }
 
         // Event handlers
@@ -183,17 +205,15 @@
 
                 startPos = getCoord(ev, 'Y');
                 startTime = new Date();
-                wheelIndex = +$(this).attr('data-index');
-                wheelScrolled = wheelScrolling[wheelIndex] !== undefined; // Wheel is currently moving
-                currPos = wheelScrolled ? getCurrPos(wheelIndex) : wheelPosition[wheelIndex];
-                //lastPos = wheelPosition[wheelIndex];
+                currWheel = wheels[+$(this).attr('data-index')];
+                wheelScrolled = currWheel.scrolling !== undefined; // Wheel is currently moving
+                currPos = wheelScrolled ? getCurrPos(currWheel) : currWheel.position;
+                lastPos = currWheel.position;
                 endPos = startPos;
 
-                scroll(wheelIndex, currPos, 1);
+                scroll(currWheel, currPos, 1); // 1ms is needed for Android 4.0
 
-                if (ev.type === 'mousedown') {
-                    $(document).on('mousemove', onMove).on('mouseup', onEnd);
-                }
+                $(document).on(MOVE_EVENT, onMove).on(END_EVENT, onEnd);
             }
         }
 
@@ -209,20 +229,19 @@
                 moved = true;
             }*/
 
-            if (scrolling) {
+            // Prevent native scroll
+            ev.preventDefault();
 
-                if (isScrollable) {
-                    // Prevent native scroll
-                    ev.preventDefault();
+            if (isScrollable) {
 
-                    endPos = getCoord(ev, 'Y');
+                endPos = getCoord(ev, 'Y');
 
-                    scroll(wheelIndex, Math.min(-first * wheelHeight, Math.max(currPos + endPos - startPos, -last * wheelHeight)));
-                }
+                //scroll(currWheel, Math.min(-currWheel.first * wheelHeight, Math.max(currPos + endPos - startPos, -currWheel.last * wheelHeight)));
+                scroll(currWheel, currPos + endPos - startPos);
+            }
 
-                if (startPos !== endPos) {
-                    wheelScrolled = true;
-                }
+            if (startPos !== endPos) {
+                wheelScrolled = true;
             }
         }
 
@@ -275,81 +294,60 @@
 
             var dist,
                 diff,
+                first,
+                last,
                 newPos,
                 speed,
+                momentum,
+                dist = endPos - startPos,
                 time = new Date() - startTime;
 
-            if (scrolling) {
+            if (isScrollable) {
 
-                if (isScrollable) {
-
-                    if (time < 300) { // Momentum scroll
-                        speed = (endPos - startPos) / time;
-                        dist = (speed * speed) / s.speedUnit;
-                        if (endPos - startPos < 0) {
-                            dist = -dist;
-                        }
-                    } else {
-                        dist = endPos - startPos;
+                if (time < 300 && Math.abs(dist) > 10) { // Momentum scroll
+                    momentum = true;
+                    speed = (endPos - startPos) / time;
+                    dist = (speed * speed) / s.speedUnit;
+                    if (endPos - startPos < 0) {
+                        dist = -dist;
                     }
-
-                    newPos = Math.min((-2 -first) * wheelHeight, Math.max(Math.round((currPos + dist) / wheelHeight) * wheelHeight, (2 - last) * wheelHeight));
-                    time = time < 300 ? Math.round(Math.abs(wheelPosition[wheelIndex] - newPos) / wheelHeight * s.timeUnit * 1000) : 100;
-
-                    scroll(wheelIndex, newPos, time);
                 }
 
-                if (ev.type === 'mouseup') {
-                    $(document).off('mousemove', onMove).off('mouseup', onEnd);
-                }
+                newPos = Math.min(round(currPos + 25 * wheelHeight), Math.max(round(currPos + dist), round(currPos - 25 * wheelHeight)));
+                time = momentum ? Math.round(Math.abs(currWheel.position - newPos) / wheelHeight * s.timeUnit * 1000) : 100;
 
-                scrolling = false;
+                scroll(currWheel, newPos, time);
+
+                // Inifinite scroll start
+                // ----------------------
+                first = currWheel.first,
+                last = currWheel.last,
+                diff = Math.round((lastPos - currWheel.position) / wheelHeight);
+
+                currWheel.first += diff;
+                currWheel.last += diff;
+
+                lastPos = currWheel.position;
+
+                // Generate items
+                setTimeout(function () {
+                    if (diff > 0) {
+                        currWheel.markup.append(genWheelItems(currWheel, last + 1, last + diff));
+                        $('.dw-li', currWheel.markup).slice(0, diff).remove();
+                    } else if (diff < 0) {
+                        currWheel.markup.prepend(genWheelItems(currWheel, first + diff, first - 1));
+                        $('.dw-li', currWheel.markup).slice(diff).remove();
+                    }
+                    currWheel.margin += diff * wheelHeight;
+                    currWheel.markup.css('margin-top', currWheel.margin + 'px');
+                }, 10);
+                // ----------------------
+                // Inifinite scroll end
             }
-        }
 
-        var lastPos = -2000,
-            first = 0,
-            last = 100;
+            $(document).off(MOVE_EVENT, onMove).off(END_EVENT, onEnd);
 
-        function infinite() {
-            var f = first,
-                l = last;
-
-            diff = Math.round((lastPos - wheelPosition[wheelIndex]) / wheelHeight);
-            last = last + diff;
-            first = first + diff;
-
-            lastPos = wheelPosition[wheelIndex];
-
-            // Generate items
-            setTimeout(function () {
-                var html = '<div class="dw-bf">',
-                    x = 1;
-
-                if (diff > 0) {
-                    for (var i = l + 1; i < l + diff + 1; i++) {
-                        if (x % 20 == 0) {
-                            html += '</div><div class="dw-bf">';
-                        }
-                        html += '<div role="option" class="dw-li dw-v" data-val="' + i + '" style="height:' + wheelHeight + 'px;top:' + (i * wheelHeight) + 'px;"><div class="dw-i">' + i + '</div></div>';
-                        x++;
-                    }
-                    html += '</div>';
-                    wheelMarkup.eq(wheelIndex).append(html);
-                    $('.dw-li', wheelMarkup[wheelIndex]).slice(0, diff).remove();
-                } else if (diff < 0) {
-                    for (var i = f + diff; i < f; i++) {
-                        if (x % 20 == 0) {
-                            html += '</div><div class="dw-bf">';
-                        }
-                        html += '<div role="option" class="dw-li dw-v" data-val="' + i + '" style="height:' + wheelHeight + 'px;top:' + (i * wheelHeight) + 'px;"><div class="dw-i">' + i + '</div></div>';
-                        x++;
-                    }
-                    html += '</div>';
-                    wheelMarkup.eq(wheelIndex).prepend(html);
-                    $('.dw-li', wheelMarkup[wheelIndex]).slice(diff).remove();
-                }
-            }, 10);
+            scrolling = false;
         }
 
         /**
@@ -360,8 +358,8 @@
         that.attachShow = function (elm, beforeShow) {
             elmList.push(elm);
             if (s.display !== 'inline') {
-                elm.on((s.showOnFocus ? 'focus.mbsc' : '') + (s.showOnTap ? ' click.mbsc' : ''), function () {
-                    if (!preventShow && !tap) {
+                elm.on((s.showOnFocus ? 'focus.mbsc' : '') + (s.showOnTap ? ' click.mbsc' : ''), function (ev) {
+                    if ((ev.type !== 'focus' || (ev.type === 'focus' && !preventShow)) && !tap) {
                         if (beforeShow) {
                             beforeShow();
                         }
@@ -398,7 +396,7 @@
             }
 
             // Parse value from input
-            //read();
+            readValue();
 
             event('onBeforeShow', []);
 
@@ -417,6 +415,7 @@
                 html += '<div class="dwc' + (s.mode != 'scroller' ? ' dwpm' : ' dwsc') + (s.showLabel ? '' : ' dwhl') + '"><div class="dwwc dwrc"><table cellpadding="0" cellspacing="0"><tr>';
                 $.each(wg, function (j, w) { // Wheels
                     wheels[nr] = w;
+                    w.margin = (s.rows - 1) * wheelHeight / 2;
                     lbl = w.label !== undefined ? w.label : j;
                     html += '<td><div class="dwwl dwrc dwwl' + nr + '" data-index="' + nr + '" style="line-height:' + wheelHeight + 'px;">' +
                         (s.mode != 'scroller' ?
@@ -428,10 +427,11 @@
                                 (s.fixedWidth ? ('width:' + (s.fixedWidth[nr] || s.fixedWidth) + 'px;') :
                                     (s.minWidth ? ('min-width:' + (s.minWidth[nr] || s.minWidth) + 'px;') : 'min-width:' + s.width + 'px;') +
                                     (s.maxWidth ? ('max-width:' + (s.maxWidth[nr] || s.maxWidth) + 'px;') : '')) + '">' +
-                                '<div class="dw-ul" style="margin-top:' + ((s.rows - 1) * wheelHeight / 2 ) + 'px;">';
+                                '<div class="dw-ul" style="margin-top:' + w.margin + 'px;">';
 
                     // Create wheel values
-                    html += genWheelItems(nr);
+                    //html += genWheelItems(w);
+                    html += genWheelItems(w, -25, 25);
                     html += '</div><div class="dwwol"></div></div><div class="dwwo"></div></div><div class="dwwol"></div></div></td>';
                     nr++;
                 });
@@ -454,12 +454,14 @@
 
             markup = $(html);
 
-            wheelMarkup = $('.dw-ul', markup);
-
             //persp = $('.dw-persp', markup);
 
-            wheelMarkup.each(function (i, w) {
-                scroll(i, -50 * wheelHeight);
+            $('.dw-ul', markup).each(function (i, w) {
+                wheels[i].markup = $(this);
+                wheels[i].first = -25;
+                wheels[i].last = 25;
+
+                scroll(wheels[i], -25 * wheelHeight);
             });
 
             //scrollToPos();
@@ -528,7 +530,7 @@
                 //.on('keyup', '.dwwl', onKeyUp)
                 .on('selectstart mousedown', prevdef) // Prevents blue highlight on Android and text selection in IE
                 .on('click', '.dwb-e', prevdef)
-                .on('touchend', function () { if (s.tap) { setTap(); } })
+                .on('touchend', function () { if (s.tap) { setTap(); } }) // Prevent standard behaviour on click
                 .on('keydown', '.dwb-e', function (e) {
                     if (e.keyCode == 32) { // Space
                         e.preventDefault();
@@ -554,10 +556,7 @@
 
                 markup.on(START_EVENT, '.dwwl', onStart).on(START_EVENT, '.dwb-e', onBtnStart);*/
 
-                $('.dwwl', markup)
-                    .on('touchstart mousedown', onStart)
-                    .on('touchmove', onMove)
-                    .on('touchend touchcancel', onEnd)
+                $('.dwwl', markup).on('touchstart mousedown', onStart);
 
             }, 300);
 
@@ -612,6 +611,8 @@
             wnd = $(s.context == 'body' ? window : s.context);
             doc = $(s.context)[0];
 
+            margin = (s.rows - 1) * wheelHeight / 2;
+
             that.context = wnd;
             that.live = !isModal || ($.inArray('set', buttons) == -1);
             that.buttons.set = { text: s.setText, css: 'dwb-s', handler: that.select };
@@ -631,7 +632,7 @@
             }
 
             if (isModal) {
-                read();
+                readValue();
                 if (isInput) {
                     // Set element readonly, save original state
                     if (readOnly === undefined) {
@@ -640,13 +641,6 @@
                     e.readOnly = true;
                 }
                 that.attachShow(elm);
-
-                // Blur element on window blur (e.g. tabchange) to prevent re-show on window focus
-                $(window).off('.mbsc').on('focus.mbsc', function () {
-                    if (activeElm && document.activeElement == activeElm[0]) {
-                        preventShow = true;
-                    }
-                });
             } else {
                 that.show();
             }
@@ -718,6 +712,7 @@
         scrolling,
         tap,
         touch,
+        preventShow,
         ms = $.mobiscroll,
         instances = ms.instances,
         util = ms.util,
@@ -772,10 +767,14 @@
                 $.each(inst.settings.wheels, function (j, wg) {
                     $.each(wg, function (k, w) {
                         keys = w.keys || w.values;
-                        if ($.inArray(val[i], keys) !== -1) {
-                            ret.push(val[i]);
+                        if ($.isArray(keys)) {
+                            if ($.inArray(val[i], keys) !== -1) {
+                                ret.push(val[i]);
+                            } else {
+                                ret.push(keys[0]);
+                            }
                         } else {
-                            ret.push(keys[0]);
+                            ret.push(keys(val[i] === undefined ? 0 : val[i]));
                         }
                         i++;
                     });
@@ -784,7 +783,14 @@
             }
         };
 
-    $(document).on('mouseover mouseup mousedown click', function (e) { // Prevent standard behaviour on body click
+    // Prevent re-show on window focus
+    $(window).on('focus.mbsc', function () {
+        if (activeElm && document.activeElement == activeElm[0]) {
+            preventShow = true;
+        }
+    });
+
+    $(document).on('mouseover mouseup mousedown click', function (e) { // Prevent standard behaviour on click
         if (tap) {
             e.stopPropagation();
             e.preventDefault();

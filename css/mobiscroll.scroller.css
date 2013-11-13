@@ -180,16 +180,15 @@
     -webkit-backface-visibility: hidden;
 }
 .dw-ul {
+    -webkit-backface-visibility: hidden;
     position: relative;
     z-index: 2;
 }
 .dw-li {
-    position: absolute;
-    width: 100%;
-    /*padding: 0 5px;*/
+    /*-webkit-transform: translateZ(0);*/
+    padding: 0 5px;
     display: block;
     text-align: center;
-    line-height: 40px;
     font-size: 26px;
     white-space: nowrap;
     text-shadow: 0 1px 1px #000;
@@ -213,7 +212,6 @@
 }
 .dw-i {
     position: relative;
-    padding: 0 5px;
     height: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
