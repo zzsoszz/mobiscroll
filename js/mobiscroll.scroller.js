@@ -45,7 +45,8 @@
 
         function genWheelItems(w, first, last) {
             var i,
-                html = '',
+                l = 0,
+                html = '<div class="dw-bf">',
                 labels = w.labels || [],
                 values = w.values,
                 keys = w.keys || values,
@@ -53,10 +54,14 @@
                 length = values.length;
 
             for (i = first; i <= last; i++) {
+                if (l % 20 == 0) {
+                    html += '</div><div class="dw-bf">';
+                }
                 html += '<div role="option" class="dw-li dw-v" data-val="' + i + '"' + (labels[i] ? ' aria-label="' + labels[i] + '"' : '') + ' style="height:' + wheelHeight + 'px;"><div class="dw-i">' + (isArray ? $(values).get(i % length) : values(i)) + '</div></div>';
+                l++;
             }
 
-            return html;
+            return html + '</div>';
         }
 
         function getCurrPos(w) {
@@ -339,7 +344,7 @@
                         $('.dw-li', currWheel.markup).slice(diff).remove();
                     }
                     currWheel.margin += diff * wheelHeight;
-                    currWheel.markup.css('margin-top', currWheel.margin + 'px');
+                    currWheel.markup.css('margin-top', currWheel.margin + 'px').find('.dw-bf:empty').remove();
                 }, 10);
                 // ----------------------
                 // Inifinite scroll end
