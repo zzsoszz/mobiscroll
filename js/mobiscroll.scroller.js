@@ -3,35 +3,41 @@
 
     $.mobiscroll.classes.Scroller = function (elem, settings) {
 
-        var animate,
-            doc,
+        var $doc,
+            $markup,
+            $wnd,
+            animate,
+            currIndex,
             currPos,
             currWheel,
             endPos,
             lang,
-            lastPos,
-            markup,
             overlay,
             persp,
             preset,
             readOnly,
+            rowsNr,
             startPos,
+            tempValues,
             theme,
+            values,
             valueText,
             wheelHeight,
             wheelScrolled,
-            wnd,
             wndWidth,
             wndHeight,
+
             that = this,
             e = elem,
-            elm = $(e),
+            $elm = $(e),
             s = extend({}, defaults),
             wheels = [],
+            wheelValues = [],
             elmList = [],
-            isInput = elm.is('input'),
-            batchSize = 25,
+            isInput = $elm.is('input'),
+            batchSize = 30,
 
+            isModal,
             isScrollable,
             isVisible,
             scrollLock,
@@ -51,29 +57,51 @@
             return ret;
         }
 
-        function genWheelItems(w, first, last) {
+        function genWheelItems(wheel, first, last) {
             var i,
+                key,
+                value,
                 l = 0,
-                html = '<div class="dw-bf">',
-                labels = w.labels || [],
-                values = w.values,
-                keys = w.keys || values,
+                html = '',//'<div class="mbsc-sc-batch">',
+                labels = wheel.labels || [],
+                values = wheel.values,
+                keys = wheel.keys || values,
                 isArray = $.isArray(values),
                 length = values.length;
 
             for (i = first; i <= last; i++) {
-                if (l % 20 == 0) {
-                    html += '</div><div class="dw-bf">';
+                // TODO: call values function only ones and should return the whole batch
+                value = (isArray ? $(values).get(i % length) : values(i));
+                key = (isArray ? $(keys).get(i % length) : keys(i));
+
+                wheelValues[wheel.index][l] = value;
+
+                // Don't generate values greater than min and max indexes
+                if ((wheel.min !== undefined && i < wheel.min) || (wheel.max !== undefined && i > wheel.max)) {
+                    value = '';
                 }
-                html += '<div role="option" class="dw-li dw-v" data-val="' + i + '"' + (labels[i] ? ' aria-label="' + labels[i] + '"' : '') + ' style="height:' + wheelHeight + 'px;"><div class="dw-i">' + (isArray ? $(values).get(i % length) : values(i)) + '</div></div>';
+
+                if (l % 20 == 0) {
+                    //html += '</div><div class="mbsc-sc-batch">';
+                }
+
+                html += '<div data-i="' + i + '" data-val="' + key + '" role="option" class="mbsc-sc-itm"' + (labels[i] ? ' aria-label="' + labels[i] + '"' : '') + ' style="height:' + wheelHeight + 'px;"><div class="mbsc-sc-itm-i">' + value + '</div></div>';
                 l++;
             }
 
-            return html + '</div>';
+            return html;// + '</div>';
         }
 
-        function getCurrPos(w) {
-            var target = w.markup[0],
+        function getWheelKey(wheel) {
+            var index = wheel.selectedIndex,
+                values = wheel.values,
+                keys = wheel.keys || values;
+
+            return $.isArray(keys) ? $(keys).get(index % keys.length) : keys(index);
+        }
+
+        function getCurrPos(wheel) {
+            var target = wheel.$markup[0],
                 style = window.getComputedStyle ? getComputedStyle(target) : target.style,
                 matrix;
 
@@ -91,44 +119,8 @@
             return +style.top.replace('px', '');
         }
 
-        function scroll(w, px, time, active) {
-            /*var px = (m - val) * hi,
-                style = t[0].style,
-                i;
-
-            if (px == pixels[index] && iv[index]) {
-                return;
-            }
-
-            if (time && px != pixels[index]) {
-                // Trigger animation start event
-                event('onAnimStart', [dw, index, time]);
-            }
-
-            pixels[index] = px;
-
-            style[pr + 'Transition'] = 'all ' + (time ? time.toFixed(3) : 0) + 's ease-out';
-
-            if (has3d) {
-                style[pr + 'Transform'] = 'translate3d(0,' + px + 'px,0)';
-            } else {
-                style.top = px + 'px';
-            }
-
-            if (iv[index]) {
-                ready(t, index);
-            }
-
-            if (time && active) {
-                t.closest('.dwwl').addClass('dwa');
-                iv[index] = setTimeout(function () {
-                    ready(t, index);
-                }, time * 1000);
-            }
-
-            pos[index] = val;*/
-
-            var style = w.markup[0].style;
+        function scroll(wheel, px, time, active) {
+            var style = wheel.$markup[0].style;
 
             style[jsPrefix + 'Transition'] = prefix + 'transform ' + (time || 0) + 'ms ease-out';
 
@@ -138,58 +130,118 @@
                 style.top = px + 'px';
             }
 
-            if (w.scrolling) {
-                scrollReady(w);
+            if (wheel.scrolling) {
+                scrollReady(wheel);
             }
 
             if (time !== undefined) {
-                w.scrolling = setTimeout(function () {
-                    scrollReady(w);
+                wheel.scrolling = setTimeout(function () {
+                    scrollReady(wheel);
                 }, time);
             }
 
-            w.position = px;
+            wheel.position = px;
         }
 
-        function scrollReady(w) {
-            clearTimeout(w.scrolling);
-            delete w.scrolling;
+        /*
+         * Clear timers and flags if wheel finished scrolling animation or new scroll is started.
+         */
+        function scrollReady(wheel) {
+            clearTimeout(wheel.scrolling);
+            delete wheel.scrolling;
             //t.closest('.dwwl').removeClass('dwa');
         }
 
-        //function scrollToPos(time, index, manual, dir, active) {
-        function scrollToValue(time) {
-            $.each(wheels, function (i, w) {
-                scroll(w, w.first * wheelHeight, time);
+        /*
+         * Scroll all wheels to the selected values.
+         */
+        function scrollToValues(time) {
+            var oldIndex,
+                selectedIndex,
+                keys;
+
+            var invalid = event('validate', [tempValues, wheelValues]);
+
+            $.each(wheels, function (i, wheel) {
+                // Check if wheel is already at the selected value
+                if (wheel.selectedValue !== tempValues[i]) {
+                    keys = wheel.keys || wheel.values;
+
+                    // Search for the index of the selected value
+                    selectedIndex = $.isArray(keys) ? $.inArray(tempValues[i], keys) : wheel.indexes(tempValues[i]);
+                    //oldIndex = $.isArray(keys) ? $.inArray(wheel.selectedValue, keys) : wheel.indexes(wheel.selectedValue);
+
+                    wheel.selectedIndex += selectedIndex - oldIndex;
+                    wheel.selectedValue = tempValues[i];
+
+                    // Scroll wheel in position
+                    scroll(wheel, -wheel.selectedIndex * wheelHeight, time);
+                }
+
+                // Generate new values for infinite / circular wheel
+                var first = wheel.first,
+                    last = wheel.last,
+                    diff = wheel.infinite ? Math.round((wheel.lastPosition - wheel.position) / wheelHeight) : 0;
+
+                    wheel.first += diff;
+                    wheel.last += diff;
+
+                    wheel.lastPosition = wheel.position;
+
+                    // Generate items
+                    setTimeout(function () {
+                        if (diff > 0) {
+                            wheel.$markup.append(genWheelItems(wheel, last + 1, last + diff));
+                            $('.mbsc-sc-itm', wheel.$markup).slice(0, diff).remove();
+                        } else if (diff < 0) {
+                            wheel.$markup.prepend(genWheelItems(wheel, first + diff, first - 1));
+                            $('.mbsc-sc-itm', wheel.$markup).slice(diff).remove();
+                        }
+
+                        if (diff) {
+                            wheel.margin += diff * wheelHeight;
+                            wheel.$markup.css('margin-top', wheel.margin + 'px').find('.mbsc-sc-batch:empty').remove();
+                        }
+
+                        // Add invalid class to  invalid items
+                        $('.mbsc-sc-itm', wheel.$markup).removeClass('mbsc-sc-itm-inv');
+                        $.each(invalid[i], function (j, val) {
+                            $('.mbsc-sc-itm[data-val="' + val + '"]', wheel.$markup).addClass('mbsc-sc-itm-inv');
+                        });
+
+                    }, 10);
+
+                //if (i == 1)
+                //console.log(wheel.first, wheel.last, selectedIndex);
             });
         }
 
         function readValue() {
-            that.temp = that.values ? that.values.slice(0) : s.parseValue(elm.val() || '', that);
+            tempValues = values ? values.slice(0) : s.parseValue($elm.val() || '', that);
             setValue();
         }
 
-        function setValue(fill, time, noscroll, temp, manual) {
+        function setValue(fill, time, noscroll, temp) {
             if (isVisible && !noscroll) {
                 //scrollToPos(time, undefined, manual);
             }
 
-            valueText = s.formatResult(that.temp);
+            valueText = s.formatResult(tempValues);
 
             if (!temp) {
-                that.values = that.temp.slice(0);
+                values = tempValues.slice(0);
                 that.val = valueText;
             }
 
             if (fill && isInput) {
                 preventChange = true;
-                elm.val(valueText).change();
+                $elm.val(valueText).change();
             }
         }
 
         function attachPosition(ev, checkLock) {
             var debounce;
-            wnd.on(ev, function (e) {
+            $wnd.on(ev, function (e) {
                 clearTimeout(debounce);
                 debounce = setTimeout(function () {
                     if ((scrollLock && checkLock) || !checkLock) {
@@ -206,180 +258,134 @@
         // Event handlers
 
         function onStart(ev) {
-            // Scroll start
-            /*if (testTouch(e) && !move && !click && !btn && !isReadOnly(this)) {
-                // Prevent touch highlight
-                e.preventDefault();
-
-                move = true;
-                scrollable = s.mode != 'clickpick';
-                target = $('.dw-ul', this);
-                setGlobals(target);
-                moved = iv[index] !== undefined; // Don't allow tap, if still moving
-                p = moved ? getCurrentPosition(target) : pos[index];
-                start = getCoord(e, 'Y');
-                startTime = new Date();
-                stop = start;
-                scroll(target, index, p, 0.001);
-
-                if (scrollable) {
-                    target.closest('.dwwl').addClass('dwa');
-                }
-
-                $(document).on(MOVE_EVENT, onMove).on(END_EVENT, onEnd);
-            }*/
-
-            if (!scrolling) {
+            // TODO: test touch
+            if (!action) {
                 // Prevent touch highlight
                 ev.preventDefault();
 
-                scrolling = true;
+                action = true;
 
                 startPos = getCoord(ev, 'Y');
                 startTime = new Date();
-                currWheel = wheels[+$(this).attr('data-index')];
-                wheelScrolled = currWheel.scrolling !== undefined; // Wheel is currently moving
+
+                currIndex = +$(this).attr('data-index');
+                currWheel = wheels[currIndex];
+
+                // Check if wheel is currently moving
+                wheelScrolled = currWheel.scrolling !== undefined;
+
+                // If moving, get actual position, otherwise the last save position
                 currPos = wheelScrolled ? getCurrPos(currWheel) : currWheel.position;
-                lastPos = currWheel.position;
                 endPos = startPos;
+
+                currWheel.lastPosition = currWheel.position;
 
                 scroll(currWheel, currPos, 1); // 1ms is needed for Android 4.0
 
-                $(document).on(MOVE_EVENT, onMove).on(END_EVENT, onEnd);
+                // Attach mouse event to document if mouse was used
+                if (ev.type === 'mousedown') {
+                    $(document).on('mousemove', onMove).on('mouseup', onEnd);
+                }
             }
         }
 
         function onMove(ev) {
-            /*if (scrollable) {
-                // Prevent scroll
-                e.preventDefault();
-                e.stopPropagation();
-                stop = getCoord(e, 'Y');
-                scroll(target, index, constrain(p + (start - stop) / hi, min - 1, max + 1));
-            }
-            if (start !== stop) {
-                moved = true;
-            }*/
+            var limit,
+                min,
+                max;
 
-            // Prevent native scroll
-            ev.preventDefault();
+            if (action) {
+                // Prevent native scroll
+                ev.preventDefault();
 
-            if (isScrollable) {
+                if (isScrollable) {
+                    // If infinite, don't allow to see the end of the wheel, otherwise allow one position to scroll over
+                    limit = currWheel.infinite ? Math.round(rowsNr / 2) : -1;
+                    min = -limit - currWheel.first;
+                    max = limit - currWheel.last;
 
-                endPos = getCoord(ev, 'Y');
+                    if (currWheel.min !== undefined) {
+                        min = Math.min(1 - currWheel.min, min);
+                    }
 
-                //scroll(currWheel, Math.min(round(lastPos + batchSize * wheelHeight), Math.max(currPos + endPos - startPos, round(lastPos - batchSize * wheelHeight))));
-                scroll(currWheel, currPos + endPos - startPos);
-            }
+                    if (currWheel.min !== undefined) {
+                        max = Math.max(-1 - currWheel.max, max);
+                    }
 
-            if (startPos !== endPos) {
-                wheelScrolled = true;
+                    // Constrain movement between min and max limits
+                    endPos = Math.min(min * wheelHeight + startPos - currPos, Math.max(getCoord(ev, 'Y'), max * wheelHeight + startPos - currPos));
+
+                    scroll(currWheel, currPos + endPos - startPos);
+                }
+
+                if (startPos !== endPos) {
+                    wheelScrolled = true;
+                }
             }
         }
 
         function onEnd(ev) {
-            /*var time = new Date() - startTime,
-                val = constrain(p + (start - stop) / hi, min - 1, max + 1),
-                speed,
-                dist,
-                tindex,
-                ttop = target.offset().top;
-
-            if (time < 300) {
-                speed = (stop - start) / time;
-                dist = (speed * speed) / s.speedUnit;
-                if (stop - start < 0) {
-                    dist = -dist;
-                }
-            } else {
-                dist = stop - start;
-            }
-
-            tindex = Math.round(p - dist / hi);
-
-            if (!dist && !moved) { // this is a "tap"
-                var idx = Math.floor((stop - ttop) / hi),
-                    li = $($('.dw-li', target)[idx]),
-                    hl = scrollable;
-                if (event('onValueTap', [li]) !== false) {
-                    tindex = idx;
-                } else {
-                    hl = true;
-                }
-
-                if (hl) {
-                    li.addClass('dw-hl'); // Highlight
-                    setTimeout(function () {
-                        li.removeClass('dw-hl');
-                    }, 200);
-                }
-            }
-
-            if (scrollable) {
-                calc(target, tindex, 0, true, Math.round(val));
-            }
-
-            move = false;
-            target = null;
-
-            $(document).off(MOVE_EVENT, onMove).off(END_EVENT, onEnd);*/
-
             var dist,
                 diff,
-                first,
-                last,
                 newPos,
                 speed,
+                min,
+                max,
                 momentum,
                 dist = endPos - startPos,
                 time = new Date() - startTime;
 
-            if (isScrollable) {
+            if (action) {
 
-                if (time < 300 && Math.abs(dist) > 10) { // Momentum scroll
-                    momentum = true;
-                    speed = (endPos - startPos) / time;
-                    dist = (speed * speed) / s.speedUnit;
-                    if (endPos - startPos < 0) {
-                        dist = -dist;
+                if (isScrollable) {
+
+                    // Check if it's momentum scroll
+                    if (time < 300 && Math.abs(dist) > 10) {
+                        momentum = true;
+                        speed = (endPos - startPos) / time;
+                        dist = (speed * speed) / s.speedUnit;
+                        if (endPos - startPos < 0) {
+                            dist = -dist;
+                        }
                     }
+
+                    // Calculate new position within valid range
+                    if (currWheel.infinite) {
+                        min = round(currPos + (batchSize - rowsNr) * wheelHeight);
+                        max = round(currPos - (batchSize - rowsNr) * wheelHeight);
+
+                        if (currWheel.min !== undefined) {
+                            min = Math.min(-currWheel.min * wheelHeight, min);
+                        }
+
+                        if (currWheel.max !== undefined) {
+                            max = Math.max(-currWheel.max * wheelHeight, max);
+                        }
+
+                        newPos = Math.min(min, Math.max(round(currPos + dist), max));
+                    } else {
+                        newPos = Math.min(currWheel.first * wheelHeight, Math.max(round(currPos + dist), -currWheel.last * wheelHeight));
+                    }
+
+                    // Calculate moving time
+                    time = momentum ? Math.round(Math.abs(currWheel.position - newPos) / wheelHeight * s.timeUnit * 1000) : 100;
+
+                    scroll(currWheel, newPos, time);
+
+                    // Set selected value
+                    currWheel.selectedIndex = -currWheel.position / wheelHeight;
+                    currWheel.selectedValue = tempValues[currIndex] = getWheelKey(currWheel);
+                    
+                    // Validate and scroll to valid values (if validation changed something)
+                    scrollToValues(time);
                 }
 
-                newPos = Math.min(round(currPos + batchSize * wheelHeight), Math.max(round(currPos + dist), round(currPos - batchSize * wheelHeight)));
-                time = momentum ? Math.round(Math.abs(currWheel.position - newPos) / wheelHeight * s.timeUnit * 1000) : 100;
+                if (ev.type === 'mouseup') {
+                    $(document).off('mousemove', onMove).off('mouseup', onEnd);
+                }
 
-                scroll(currWheel, newPos, time);
-
-                // Inifinite scroll start
-                // ----------------------
-                first = currWheel.first,
-                last = currWheel.last,
-                diff = Math.round((lastPos - currWheel.position) / wheelHeight);
-
-                currWheel.first += diff;
-                currWheel.last += diff;
-
-                lastPos = currWheel.position;
-
-                // Generate items
-                setTimeout(function () {
-                    if (diff > 0) {
-                        currWheel.markup.append(genWheelItems(currWheel, last + 1, last + diff));
-                        $('.dw-li', currWheel.markup).slice(0, diff).remove();
-                    } else if (diff < 0) {
-                        currWheel.markup.prepend(genWheelItems(currWheel, first + diff, first - 1));
-                        $('.dw-li', currWheel.markup).slice(diff).remove();
-                    }
-                    currWheel.margin += diff * wheelHeight;
-                    currWheel.markup.css('margin-top', currWheel.margin + 'px').find('.dw-bf:empty').remove();
-                }, 10);
-                // ----------------------
-                // Inifinite scroll end
+                action = false;
             }
-
-            $(document).off(MOVE_EVENT, onMove).off(END_EVENT, onEnd);
-
-            scrolling = false;
         }
 
         /**
@@ -418,7 +424,7 @@
         */
         that.position = function (check) {
 
-            if (!isModal || preventPos || (wndWidth === persp.width() && wndHeight === (wnd[0].innerHeight || wnd.innerHeight()) && check) || (event('onPosition', [markup]) === false)) {
+            if (!isModal || preventPos || (wndWidth === persp.width() && wndHeight === ($wnd[0].innerHeight || $wnd.innerHeight()) && check) || (event('onPosition', [$markup]) === false)) {
                 return;
             }
 
@@ -437,18 +443,18 @@
                 scroll,
                 totalw = 0,
                 minw = 0,
-                sl = wnd.scrollLeft(),
-                st = wnd.scrollTop(),
-                wr = $('.dwwr', markup),
-                d = $('.dw', markup),
+                sl = $wnd.scrollLeft(),
+                st = $wnd.scrollTop(),
+                wr = $('.dwwr', $markup),
+                d = $('.dw', $markup),
                 css = {},
-                anchor = s.anchor === undefined ? elm : s.anchor;
+                anchor = s.anchor === undefined ? $elm : s.anchor;
 
             wndWidth = persp.width(); // To get the width without scrollbar
-            wndHeight = wnd[0].innerHeight || wnd.innerHeight();
+            wndHeight = $wnd[0].innerHeight || $wnd.innerHeight();
 
             if (/modal|bubble/.test(s.display)) {
-                $('.dwc', markup).each(function () {
+                $('.dwc', $markup).each(function () {
                     w = $(this).outerWidth(true);
                     totalw += w;
                     minw = (w > minw) ? w : minw;
@@ -468,7 +474,7 @@
                 t = st + (wndHeight - mh) / 2;
             } else if (s.display == 'bubble') {
                 scroll = true;
-                arr = $('.dw-arrw-i', markup);
+                arr = $('.dw-arrw-i', $markup);
                 ap = anchor.offset();
                 at = Math.abs($(s.context).offset().top - ap.top);
                 al = Math.abs($(s.context).offset().left - ap.left);
@@ -492,7 +498,7 @@
                 arrl = constrain(al + aw / 2 - (l + (mw - arrw) / 2) - sl, 0, arrw);
 
                 // Limit Arrow position
-                $('.dw-arr', markup).css({ left: arrl });
+                $('.dw-arr', $markup).css({ left: arrl });
             } else {
                 css.width = '100%';
                 if (s.display == 'top') {
@@ -506,33 +512,33 @@
             css.left = l;
             d.css(css);
 
-            // If top + modal height > doc height, increase doc height
+            // If top + modal height > $doc height, increase $doc height
             persp.height(0);
-            dh = Math.max(t + mh, s.context == 'body' ? $(document).height() : doc.scrollHeight);
+            dh = Math.max(t + mh, s.context == 'body' ? $(document).height() : $doc.scrollHeight);
             persp.css({ height: dh, left: sl });
 
             // Scroll needed
             if (scroll && ((t + mh > st + wndHeight) || (at > st + wndHeight))) {
                 preventPos = true;
                 setTimeout(function () { preventPos = false; }, 300);
-                wnd.scrollTop(Math.min(t + mh - wndHeight, dh - wndHeight));
+                $wnd.scrollTop(Math.min(t + mh - wndHeight, dh - wndHeight));
             }
         };
 
         /**
         * Show mobiscroll on focus and click event of the parameter.
-        * @param {jQuery} elm - Events will be attached to this element.
+        * @param {jQuery} $elm - Events will be attached to this element.
         * @param {Function} [beforeShow=undefined] - Optional function to execute before showing mobiscroll.
         */
-        that.attachShow = function (elm, beforeShow) {
-            elmList.push(elm);
+        that.attachShow = function ($elm, beforeShow) {
+            elmList.push($elm);
             if (s.display !== 'inline') {
-                elm.on((s.showOnFocus ? 'focus.mbsc' : '') + (s.showOnTap ? ' click.mbsc' : ''), function (ev) {
+                $elm.on((s.showOnFocus ? 'focus.mbsc' : '') + (s.showOnTap ? ' click.mbsc' : ''), function (ev) {
                     if ((ev.type !== 'focus' || (ev.type === 'focus' && !preventShow)) && !tap) {
                         if (beforeShow) {
                             beforeShow();
                         }
-                        activeElm = elm;
+                        activeElm = $elm;
                         that.show();
                     }
                     setTimeout(function () {
@@ -593,7 +599,7 @@
             //}
 
             // Create wheels containers
-            html = '<div role="dialog" class="' + s.theme + ' dw-' + s.display + (prefix ? ' dw' + prefix.replace(/\-$/, '') : '') + (hasButtons ? '' : ' dw-nobtn') + '">' +
+            html = '<div role="dialog" class="mbsc-sc-' + s.theme + ' dw-' + s.display + (prefix ? ' dw' + prefix.replace(/\-$/, '') : '') + (hasButtons ? '' : ' dw-nobtn') + '">' +
                 (!isModal ?
                     '<div class="dw dwbg dwi">' :
                     '<div class="dw-persp"><div class="dwo"></div><div class="dw dwbg"><div class="dw-arrw"><div class="dw-arrw-i"><div class="dw-arr"></div></div></div>') +
@@ -603,7 +609,24 @@
                 html += '<div class="dwc' + (s.mode != 'scroller' ? ' dwpm' : ' dwsc') + (s.showLabel ? '' : ' dwhl') + '"><div class="dwwc dwrc"><table cellpadding="0" cellspacing="0"><tr>';
                 $.each(wg, function (j, w) { // Wheels
                     wheels[nr] = w;
-                    w.margin = (s.rows - 1) * wheelHeight / 2;
+                    wheelValues[nr] = [];
+
+                    // Set wheel properties
+                    if (w.infinite) {
+                        w.first = -batchSize;
+                        w.last = batchSize;
+                    } else {
+                        w.first = 0;
+                        w.last = w.values.length - 1;
+                    }
+
+                    w.index = nr;
+                    w.position = 0;
+                    w.lastPosition = 0;
+                    w.selectedIndex = 0;
+                    w.selectedValue = tempValues[nr];
+                    w.margin = ((rowsNr - 1) / 2 + w.first) * wheelHeight;
+
                     lbl = w.label !== undefined ? w.label : j;
                     html += '<td><div class="dwwl dwrc dwwl' + nr + '" data-index="' + nr + '" style="line-height:' + wheelHeight + 'px;">' +
                         (s.mode != 'scroller' ?
@@ -611,14 +634,14 @@
                             '<a href="#" tabindex="-1" class="dwb-e dwwb dwwbm" style="height:' + wheelHeight + 'px;"><span>&ndash;</span></a>' : '') +
                         '<div class="dwl">' + lbl + '</div>' +
                         '<div tabindex="0" aria-live="off" aria-label="' + lbl + '" role="listbox" class="dwww">' +
-                            '<div class="dww" style="height:' + (s.rows * wheelHeight) + 'px;' +
+                            '<div class="dww" style="height:' + (rowsNr * wheelHeight) + 'px;' +
                                     (s.fixedWidth ? ('width:' + (s.fixedWidth[nr] || s.fixedWidth) + 'px;') :
                                     (s.minWidth ? ('min-width:' + (s.minWidth[nr] || s.minWidth) + 'px;') : 'min-width:' + s.width + 'px;') +
                                     (s.maxWidth ? ('max-width:' + (s.maxWidth[nr] || s.maxWidth) + 'px;') : '')) + '">' +
                                 '<div class="dw-ul" style="margin-top:' + w.margin + 'px;">';
 
                     // Generate wheel items
-                    html += genWheelItems(w, -batchSize, batchSize);
+                    html += genWheelItems(w, w.first, w.last);
                     html += '</div><div class="dwwol"></div></div><div class="dwwo"></div></div><div class="dwwol"></div></div></td>';
                     nr++;
                 });
@@ -640,39 +663,37 @@
             }
             html += (isModal ? '</div>' : '') + '</div></div></div>';
 
-            markup = $(html);
-            persp = $('.dw-persp', markup);
-            overlay = $('.dwo', markup);
+            $markup = $(html);
+            persp = $('.dw-persp', $markup);
+            overlay = $('.dwo', $markup);
 
-            $('.dw-ul', markup).each(function (i, w) {
-                wheels[i].markup = $(this);
-                wheels[i].first = -batchSize;
-                wheels[i].last = batchSize;
-                scroll(wheels[i], -batchSize * wheelHeight);
+            $('.dw-ul', $markup).each(function (i, w) {
+                wheels[i].$markup = $(this);
+                scroll(wheels[i], 0);
             });
 
-            //scrollToValue();
+            scrollToValues();
 
-            event('onMarkupReady', [markup]);
+            event('onMarkupReady', [$markup]);
 
             // Show
             if (isModal) {
 
-                markup.appendTo(s.context);
+                $markup.appendTo(s.context);
                 //if (animate && !preventAnimation) {
-                    //markup.addClass('dw-trans');
+                    //$markup.addClass('dw-trans');
                     // Remove animation class
                     //setTimeout(function () {
-                    //    markup.removeClass('dw-trans').find('.dw').removeClass(mAnim);
+                    //    $markup.removeClass('dw-trans').find('.dw').removeClass(mAnim);
                     //}, 350);
                 //}
-            } else if (elm.is('div')) {
-                elm.html(markup);
+            } else if ($elm.is('div')) {
+                $elm.html($markup);
             } else {
-                markup.insertAfter(elm);
+                $markup.insertAfter($elm);
             }
 
-            event('onMarkupInserted', [markup]);
+            event('onMarkupInserted', [$markup]);
 
             isVisible = true;
 
@@ -688,7 +709,7 @@
 
                 // Prevent scroll if not specified otherwise
                 if (s.scrollLock) {
-                    markup.on('touchmove', function (e) {
+                    $markup.on('touchmove', function (e) {
                         if (scrollLock) {
                             e.preventDefault();
                         }
@@ -696,7 +717,7 @@
                 }
 
                 // Disable inputs to prevent bleed through (Android bug) and set autocomplete to off (for Firefox)
-                $('input,select,button', doc).each(function () {
+                $('input,select,button', $doc).each(function () {
                     if (!this.disabled) {
                         if ($(this).attr('autocomplete')) {
                             $(this).data('autocomplete', $(this).attr('autocomplete'));
@@ -712,7 +733,7 @@
             }
 
             // Events
-            markup//.on('DOMMouseScroll mousewheel', '.dwwl', onScroll)
+            $markup//.on('DOMMouseScroll mousewheel', '.dwwl', onScroll)
                 //.on('keydown', '.dwwl', onKeyDown)
                 //.on('keyup', '.dwwl', onKeyUp)
                 .on('selectstart mousedown', prevdef) // Prevents blue highlight on Android and text selection in IE
@@ -726,10 +747,11 @@
                     }
                 });
 
+            // Attach with timeout to increase compatibility with libraries like fastclick
             setTimeout(function () {
                 // Init buttons
                 $.each(buttons, function (i, b) {
-                    that.tap($('.dwb' + i, markup), function (e) {
+                    that.tap($('.dwb' + i, $markup), function (e) {
                         b = (typeof b === 'string') ? that.buttons[b] : b;
                         b.handler.call(this, e, that);
                     });
@@ -741,13 +763,14 @@
                     });
                 }
 
-                //markup.on(START_EVENT, '.dwwl', onStart).on(START_EVENT, '.dwb-e', onBtnStart);
-
-                $('.dwwl', markup).on('touchstart mousedown', onStart);
+                $('.dwwl', $markup)
+                    .on('touchstart mousedown', onStart)
+                    .on('touchmove', onMove)
+                    .on('touchend', onEnd);
 
             }, 300);
 
-            event('onShow', [markup, valueText]);
+            event('onShow', [$markup, valueText]);
         };
 
         /**
@@ -762,7 +785,7 @@
             }
 
             // Re-enable temporary disabled fields
-            $('.mbsc-temp-disabled', doc).each(function () {
+            $('.mbsc-temp-disabled', $doc).each(function () {
                 $(this).prop('disabled', false).removeClass('mbsc-temp-disabled');
                 // Workaround for Firefox refresh (fields remained disabled)
                 if ($(this).data('autocomplete')) {
@@ -774,13 +797,13 @@
 
             // Hide wheels and overlay
             if (doAnim) {
-                //markup.addClass('dw-trans').find('.dw').addClass('dw-' + animate + ' dw-out');
+                //$markup.addClass('dw-trans').find('.dw').addClass('dw-' + animate + ' dw-out');
             }
             if (preventAnim) {
-                markup.remove();
+                $markup.remove();
             } else {
                 setTimeout(function () {
-                    markup.remove();
+                    $markup.remove();
                     if (activeElm) {
                         preventShow = true;
                         activeElm.focus();
@@ -789,7 +812,7 @@
             }
 
             // Stop positioning on window resize
-            wnd.off('.mbsc');
+            $wnd.off('.mbsc');
 
             isVisible = false;
         };
@@ -821,7 +844,7 @@
             that.settings = s;
 
             // Unbind all events (if re-init)
-            elm.off('.mbsc');
+            $elm.off('.mbsc');
 
             p = ms.presets[s.preset];
 
@@ -832,20 +855,21 @@
 
             // Set private members
             wheelHeight = s.height;
+            rowsNr = s.rows;
             animate = s.animate;
             isModal = s.display !== 'inline';
             isScrollable = s.mode !== 'clickpick';
             buttons = s.buttons;
-            wnd = $(s.context == 'body' ? window : s.context);
-            doc = $(s.context)[0];
+            $wnd = $(s.context == 'body' ? window : s.context);
+            $doc = $(s.context)[0];
 
-            that.context = wnd;
+            that.context = $wnd;
             that.live = !isModal || ($.inArray('set', buttons) == -1);
             that.buttons.set = { text: s.setText, css: 'dwb-s', handler: that.select };
             that.buttons.cancel = { text: (that.live) ? s.closeText : s.cancelText, css: 'dwb-c', handler: that.cancel };
             that.buttons.clear = { text: s.clearText, css: 'dwb-cl', handler: function () {
                 event('onClear', [dw]);
-                elm.val('');
+                $elm.val('');
                 if (!that.live) {
                     that.hide();
                 }
@@ -866,15 +890,15 @@
                     }
                     e.readOnly = true;
                 }
-                that.attachShow(elm);
+                that.attachShow($elm);
             } else {
                 that.show();
             }
 
             if (isInput) {
-                elm.on('change.mbsc', function () {
+                $elm.on('change.mbsc', function () {
                     if (!preventChange) {
-                        that.setValue(elm.val(), false, 0.2);
+                        that.setValue($elm.val(), false, 0.2);
                     }
                     preventChange = false;
                 });
@@ -908,6 +932,16 @@
             return that;
         };
 
+        /**
+        * Set mobiscroll value
+        */
+        that.setValueArray = function (values, time) {
+            tempValues = $.isArray(values) ? values.slice(0) : s.parseValue.call(e, values + '', that);
+            scrollToValues(time);
+        };
+
+        instances[e.id] = that;
+
         that.buttons = {};
 
         that.init(settings);
@@ -925,7 +959,7 @@
     }
 
     var activeElm,
-        scrolling,
+        action,
         tap,
         touch,
         preventShow,
@@ -940,9 +974,6 @@
         empty = function () {},
         prevdef = function (e) { e.preventDefault(); },
         extend = $.extend,
-        START_EVENT = 'touchstart mousedown',
-        MOVE_EVENT = 'touchmove mousemove',
-        END_EVENT = 'touchend mouseup',
         defaults = {
             // Options
             width: 70,
@@ -956,8 +987,8 @@
             showOnTap: true,
             showLabel: true,
             wheels: [],
-            theme: '',
-            selectedText: ' Selected',
+            theme: 'default',
+            selectedText: 'Selected',
             closeText: 'Close',
             display: 'modal',
             mode: 'scroller',

@@ -1,0 +1,49 @@
+﻿.dw {
+    /*position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1001;*/
+    font-size: 12px;
+    text-shadow: none;
+    -webkit-backface-visibility: hidden;
+    -webkit-box-sizing: border-box;
+    -webkit-user-select: none;
+    -moz-box-sizing: border-box;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    -ms-touch-action: none;
+    box-sizing: border-box;
+    user-select: none;
+    touch-action: none;
+}
+.dw table {
+    /*width: 100%;*/
+    text-align: center;
+}
+.dww {
+    overflow: hidden;
+    position: relative;
+    z-index: 2;
+}
+.dw-ul {
+    position: relative;
+    z-index: 2;
+    -webkit-backface-visibility: hidden;
+}
+.mbsc-sc-batch {
+    -webkit-backface-visibility: hidden;
+    -webkit-perspective: 1000px;
+}
+
+/* Default theme */
+.mbsc-sc-default .dww {
+    background: #000;
+}
+.mbsc-sc-default .mbsc-sc-itm {
+    color: #fff;
+    font-size: 26px;
+    text-align: center;
+}
+.mbsc-sc-default .mbsc-sc-itm-inv {
+    opacity: .3;
+}
