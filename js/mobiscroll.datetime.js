@@ -4,66 +4,119 @@
     var ms = $.mobiscroll,
         date = new Date(),
         defaults = {
-            dateFormat: 'mm/dd/yy',
-            dateOrder: 'mmddy',
-            timeWheels: 'hhiiA',
-            timeFormat: 'hh:ii A',
             startYear: date.getFullYear() - 100,
-            endYear: date.getFullYear() + 1,
-            monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-            monthNamesShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-            dayNames: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-            dayNamesShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+            endYear: date.getFullYear() + 100,
             shortYearCutoff: '+10',
-            monthText: 'Month',
-            dayText: 'Day',
-            yearText: 'Year',
-            hourText: 'Hours',
-            minuteText: 'Minutes',
-            secText: 'Seconds',
-            ampmText: '&nbsp;',
-            nowText: 'Now',
-            showNow: false,
             stepHour: 1,
             stepMinute: 1,
             stepSecond: 1,
-            separator: ' '
+            separator: ' ',
+            ampmText: '&nbsp;'
         },
+
         /**
          * @class Mobiscroll.datetime
          * @extends Mobiscroll
          * Mobiscroll Datetime component
          */
         preset = function (inst) {
+
+            function get(d, i, def) {
+                if (o[i] !== undefined) {
+                    return +d[o[i]];
+                }
+                if (def !== undefined) {
+                    return def;
+                }
+                return defd[f[i]] ? defd[f[i]]() : f[i](defd);
+            }
+
+            function addWheel(wg, k, v, lbl, infinite, min, max, indexes) {
+                wg.push({
+                    values: v,
+                    keys: k,
+                    label: lbl,
+                    infinite: infinite,
+                    indexes: indexes,
+                    min: min,
+                    max: max
+                });
+            }
+
+            function step(v, st) {
+                return Math.floor(v / st) * st;
+            }
+
+            function getHour(d) {
+                var hour = d.getHours();
+                hour = hampm && hour >= 12 ? hour - 12 : hour;
+                return step(hour, stepH);
+            }
+
+            function getMinute(d) {
+                return step(d.getMinutes(), stepM);
+            }
+
+            function getSecond(d) {
+                return step(d.getSeconds(), stepS);
+            }
+
+            function getAmPm(d) {
+                return ampm && d.getHours() > 11 ? 1 : 0;
+            }
+
+            function getDate(d) {
+                var hour = get(d, 'h', 0);
+                return new Date(get(d, 'y'), get(d, 'm'), get(d, 'd', 1), get(d, 'a', 0) ? hour + 12 : hour, get(d, 'i', 0), get(d, 's', 0));
+            }
+
+            function getIndex(t, v) {
+                return $('.dw-li', t).index($('.dw-li[data-val="' + v + '"]', t));
+            }
+
+            function getValidIndex(t, v, max, add) {
+                if (v < 0) {
+                    return 0;
+                }
+                if (v > max) {
+                    return $('.dw-li', t).length;
+                }
+                return getIndex(t, v) + add;
+            }
+
             var that = $(this),
                 html5def = {},
                 format;
+
             // Force format for html5 date inputs (experimental)
             if (that.is('input')) {
                 switch (that.attr('type')) {
-                case 'date':
-                    format = 'yy-mm-dd';
-                    break;
-                case 'datetime':
-                    format = 'yy-mm-ddTHH:ii:ssZ';
-                    break;
-                case 'datetime-local':
-                    format = 'yy-mm-ddTHH:ii:ss';
-                    break;
-                case 'month':
-                    format = 'yy-mm';
-                    html5def.dateOrder = 'mmyy';
-                    break;
-                case 'time':
-                    format = 'HH:ii:ss';
-                    break;
+                    case 'date':
+                        format = 'yy-mm-dd';
+                        break;
+                    case 'datetime':
+                        format = 'yy-mm-ddTHH:ii:ssZ';
+                        break;
+                    case 'datetime-local':
+                        format = 'yy-mm-ddTHH:ii:ss';
+                        break;
+                    case 'month':
+                        format = 'yy-mm';
+                        html5def.dateOrder = 'mmyy';
+                        break;
+                    case 'time':
+                        format = 'HH:ii:ss';
+                        break;
                 }
+
                 // Check for min/max attributes
                 var min = that.attr('min'),
                     max = that.attr('max');
+
                 if (min) {
                     html5def.minDate = ms.parseDate(format, min);
                 }
+
                 if (max) {
                     html5def.maxDate = ms.parseDate(format, max);
                 }
@@ -77,10 +130,10 @@
                 wg,
                 start,
                 end,
-                invalid,
                 hasTime,
                 orig = $.extend({}, inst.settings),
                 s = $.extend(inst.settings, defaults, html5def, orig),
+                invalid = s.invalid,
                 offset = 0,
                 wheels = [],
                 ord = [],
@@ -120,15 +173,24 @@
                 for (k = 0; k < 3; k++) {
                     if (k == o.y) {
                         offset++;
-                        values = [];
-                        keys = [];
-                        start = mind.getFullYear();
-                        end = maxd.getFullYear();
-                        for (i = start; i <= end; i++) {
-                            keys.push(i);
-                            values.push(dord.match(/yy/i) ? i : (i + '').substr(2, 2));
-                        }
-                        addWheel(wg, keys, values, s.yearText);
+                        //values = [];
+                        //keys = [];
+                        //start = mind.getFullYear();
+                        //end = maxd.getFullYear();
+                        //for (i = start; i <= end; i++) {
+                        //    keys.push(i);
+                        //    values.push(dord.match(/yy/i) ? i : (i + '').substr(2, 2));
+                        //}
+                        addWheel(
+                            wg,
+                            function (i) { return i; },
+                            function (i) { return dord.match(/yy/i) ? i : (i + '').substr(2, 2); },
+                            s.yearText,
+                            true,
+                            mind.getFullYear(),
+                            maxd.getFullYear(),
+                            function (v) { return v; }
+                        );
                     } else if (k == o.m) {
                         offset++;
                         values = [];
@@ -138,7 +200,7 @@
                             keys.push(i);
                             values.push(str.match(/MM/) ? str.replace(/MM/, '<span class="dw-mon">' + s.monthNames[i] + '</span>') : str.replace(/M/, '<span class="dw-mon">' + s.monthNamesShort[i] + '</span>'));
                         }
-                        addWheel(wg, keys, values, s.monthText);
+                        addWheel(wg, keys, values, s.monthText, true);
                     } else if (k == o.d) {
                         offset++;
                         values = [];
@@ -147,7 +209,7 @@
                             keys.push(i);
                             values.push(dord.match(/dd/i) && i < 10 ? '0' + i : i);
                         }
-                        addWheel(wg, keys, values, s.dayText);
+                        addWheel(wg, keys, values, s.dayText, true);
                     }
                 }
                 wheels.push(wg);
@@ -177,11 +239,11 @@
                         offset++;
                         values = [];
                         keys = [];
-                        for (i = 0; i < (hampm ? 12 : 24); i += stepH) {
+                        for (i = 0; i < (hampm ? 12 : 24) ; i += stepH) {
                             keys.push(i);
                             values.push(hampm && i == 0 ? 12 : tord.match(/hh/i) && i < 10 ? '0' + i : i);
                         }
-                        addWheel(wg, keys, values, s.hourText);
+                        addWheel(wg, keys, values, s.hourText, true);
                     } else if (k == o.i) {
                         offset++;
                         values = [];
@@ -190,7 +252,7 @@
                             keys.push(i);
                             values.push(tord.match(/ii/) && i < 10 ? '0' + i : i);
                         }
-                        addWheel(wg, keys, values, s.minuteText);
+                        addWheel(wg, keys, values, s.minuteText, true);
                     } else if (k == o.s) {
                         offset++;
                         values = [];
@@ -199,74 +261,15 @@
                             keys.push(i);
                             values.push(tord.match(/ss/) && i < 10 ? '0' + i : i);
                         }
-                        addWheel(wg, keys, values, s.secText);
+                        addWheel(wg, keys, values, s.secText, true);
                     } else if (k == o.a) {
                         offset++;
                         var upper = tord.match(/A/);
-                        addWheel(wg, [0, 1], upper ? ['AM', 'PM'] : ['am', 'pm'], s.ampmText);
+                        addWheel(wg, [0, 1], upper ? [s.amText.toUpperCase(), s.pmText.toUpperCase()] : [s.amText, s.pmText], s.ampmText);
                     }
                 }
 
                 wheels.push(wg);
-            }
-
-            function get(d, i, def) {
-                if (o[i] !== undefined) {
-                    return +d[o[i]];
-                }
-                if (def !== undefined) {
-                    return def;
-                }
-                return defd[f[i]] ? defd[f[i]]() : f[i](defd);
-            }
-
-            function addWheel(wg, k, v, lbl) {
-                wg.push({
-                    values: v,
-                    keys: k,
-                    label: lbl
-                });
-            }
-
-            function step(v, st) {
-                return Math.floor(v / st) * st;
-            }
-
-            function getHour(d) {
-                var hour = d.getHours();
-                hour = hampm && hour >= 12 ? hour - 12 : hour;
-                return step(hour, stepH);
-            }
-
-            function getMinute(d) {
-                return step(d.getMinutes(), stepM);
-            }
-
-            function getSecond(d) {
-                return step(d.getSeconds(), stepS);
-            }
-
-            function getAmPm(d) {
-                return ampm && d.getHours() > 11 ? 1 : 0;
-            }
-
-            function getDate(d) {
-                var hour = get(d, 'h', 0);
-                return new Date(get(d, 'y'), get(d, 'm'), get(d, 'd', 1), get(d, 'a') ? hour + 12 : hour, get(d, 'i', 0), get(d, 's', 0));
-            }
-
-            function getIndex(t, v) {
-                return $('.dw-li', t).index($('.dw-li[data-val="' + v + '"]', t));
-            }
-
-            function getValidIndex(t, v, max, add) {
-                if (v < 0) {
-                    return 0;
-                }
-                if (v > max) {
-                    return $('.dw-li', t).length;
-                }
-                return getIndex(t, v) + add;
             }
 
             // Extended methods
@@ -279,16 +282,16 @@
              * @param {Boolean} [fill=false] Also set the value of the associated input element. Default is true.
              * @param {Number} [time=0] Animation time to scroll to the selected date.
              * @param {Boolean} [temp=false] Set temporary value only.
-             * @param {Boolean} [manual=false] Indicates that the action was triggered by the user or from code.
+             * @param {Boolean} [change=fill] Trigger change on input element.
              */
-            inst.setDate = function (d, fill, time, temp) {
+            inst.setDate = function (d, fill, time, temp, change) {
                 var i;
 
                 // Set wheels
                 for (i in o) {
                     inst.temp[o[i]] = d[f[i]] ? d[f[i]]() : f[i](d);
                 }
-                inst.setValue(inst.temp, fill, time, temp);
+                inst.setValue(inst.temp, fill, time, temp, change);
             };
 
             /**
@@ -301,36 +304,9 @@
                 return getDate(temp ? inst.temp : inst.values);
             };
 
-            inst.convert = function (obj) {
-                var x = obj;
-
-                if (!$.isArray(obj)) { // Convert from old format
-                    x = [];
-                    $.each(obj, function (i, o) {
-                        $.each(o, function (j, o) {
-                            if (i === 'daysOfWeek') {
-                                if (o.d) {
-                                    o.d = 'w' + o.d;
-                                } else {
-                                    o = 'w' + o;
-                                }
-                            }
-                            x.push(o);
-                        });
-                    });
-                }
-
-                return x;
-            };
-
             inst.format = hformat;
+
             inst.buttons.now = { text: s.nowText, css: 'dwb-n', handler: function () { inst.setDate(new Date(), false, 0.3, true, true); } };
-
-            if (s.showNow) {
-                s.buttons.splice($.inArray('set', s.buttons) + 1, 0, 'now');
-            }
-
-            invalid = s.invalid ? inst.convert(s.invalid) : false;
 
             // ---
 
@@ -354,7 +330,7 @@
                     return result;
                 },
                 validate: function (dw, i, time, dir) {
-                    var temp = inst.temp, //.slice(0),
+                    /*var temp = inst.temp, //.slice(0),
                         mins = { y: mind.getFullYear(), m: 0, d: 1, h: 0, i: 0, s: 0, a: 0 },
                         maxs = { y: maxd.getFullYear(), m: 11, d: 31, h: step(hampm ? 11 : 23, stepH), i: step(59, stepM), s: step(59, stepS), a: 1 },
                         steps = { h: stepH, i: stepM, s: stepS, a: 1 },
@@ -560,10 +536,30 @@
                                 });
                             }
                         });
-                    }
+                    }*/
                 }
             };
         };
+
+    ms.i18n.en = $.extend(ms.i18n.en, {
+        dateFormat: 'mm/dd/yy',
+        dateOrder: 'mmddy',
+        timeWheels: 'hhiiA',
+        timeFormat: 'hh:ii A',
+        monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+        monthNamesShort: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+        dayNames: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+        dayNamesShort: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+        monthText: 'Month',
+        dayText: 'Day',
+        yearText: 'Year',
+        hourText: 'Hours',
+        minuteText: 'Minutes',
+        secText: 'Seconds',
+        amText: 'am',
+        pmText: 'pm',
+        nowText: 'Now'
+    });
 
     $.each(['date', 'time', 'datetime'], function (i, v) {
         ms.presets[v] = preset;
@@ -615,52 +611,52 @@
                 }
             } else {
                 switch (format.charAt(i)) {
-                case 'd':
-                    output += f1('d', date.getDate(), 2);
-                    break;
-                case 'D':
-                    output += f2('D', date.getDay(), s.dayNamesShort, s.dayNames);
-                    break;
-                case 'o':
-                    output += f1('o', (date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000, 3);
-                    break;
-                case 'm':
-                    output += f1('m', date.getMonth() + 1, 2);
-                    break;
-                case 'M':
-                    output += f2('M', date.getMonth(), s.monthNamesShort, s.monthNames);
-                    break;
-                case 'y':
-                    output += (look('y') ? date.getFullYear() : (date.getYear() % 100 < 10 ? '0' : '') + date.getYear() % 100);
-                    break;
-                case 'h':
-                    var h = date.getHours();
-                    output += f1('h', (h > 12 ? (h - 12) : (h == 0 ? 12 : h)), 2);
-                    break;
-                case 'H':
-                    output += f1('H', date.getHours(), 2);
-                    break;
-                case 'i':
-                    output += f1('i', date.getMinutes(), 2);
-                    break;
-                case 's':
-                    output += f1('s', date.getSeconds(), 2);
-                    break;
-                case 'a':
-                    output += date.getHours() > 11 ? 'pm' : 'am';
-                    break;
-                case 'A':
-                    output += date.getHours() > 11 ? 'PM' : 'AM';
-                    break;
-                case "'":
-                    if (look("'")) {
-                        output += "'";
-                    } else {
-                        literal = true;
-                    }
-                    break;
-                default:
-                    output += format.charAt(i);
+                    case 'd':
+                        output += f1('d', date.getDate(), 2);
+                        break;
+                    case 'D':
+                        output += f2('D', date.getDay(), s.dayNamesShort, s.dayNames);
+                        break;
+                    case 'o':
+                        output += f1('o', (date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000, 3);
+                        break;
+                    case 'm':
+                        output += f1('m', date.getMonth() + 1, 2);
+                        break;
+                    case 'M':
+                        output += f2('M', date.getMonth(), s.monthNamesShort, s.monthNames);
+                        break;
+                    case 'y':
+                        output += (look('y') ? date.getFullYear() : (date.getYear() % 100 < 10 ? '0' : '') + date.getYear() % 100);
+                        break;
+                    case 'h':
+                        var h = date.getHours();
+                        output += f1('h', (h > 12 ? (h - 12) : (h == 0 ? 12 : h)), 2);
+                        break;
+                    case 'H':
+                        output += f1('H', date.getHours(), 2);
+                        break;
+                    case 'i':
+                        output += f1('i', date.getMinutes(), 2);
+                        break;
+                    case 's':
+                        output += f1('s', date.getSeconds(), 2);
+                        break;
+                    case 'a':
+                        output += date.getHours() > 11 ? s.pmText : s.amText;
+                        break;
+                    case 'A':
+                        output += date.getHours() > 11 ? s.pmText.toUpperCase() : s.amText.toUpperCase();
+                        break;
+                    case "'":
+                        if (look("'")) {
+                            output += "'";
+                        } else {
+                            literal = true;
+                        }
+                        break;
+                    default:
+                        output += format.charAt(i);
                 }
             }
         }
@@ -740,51 +736,51 @@
                 }
             } else {
                 switch (format.charAt(iFormat)) {
-                case 'd':
-                    day = getNumber('d');
-                    break;
-                case 'D':
-                    getName('D', s.dayNamesShort, s.dayNames);
-                    break;
-                case 'o':
-                    doy = getNumber('o');
-                    break;
-                case 'm':
-                    month = getNumber('m');
-                    break;
-                case 'M':
-                    month = getName('M', s.monthNamesShort, s.monthNames);
-                    break;
-                case 'y':
-                    year = getNumber('y');
-                    break;
-                case 'H':
-                    hours = getNumber('H');
-                    break;
-                case 'h':
-                    hours = getNumber('h');
-                    break;
-                case 'i':
-                    minutes = getNumber('i');
-                    break;
-                case 's':
-                    seconds = getNumber('s');
-                    break;
-                case 'a':
-                    ampm = getName('a', ['am', 'pm'], ['am', 'pm']) - 1;
-                    break;
-                case 'A':
-                    ampm = getName('A', ['am', 'pm'], ['am', 'pm']) - 1;
-                    break;
-                case "'":
-                    if (lookAhead("'")) {
+                    case 'd':
+                        day = getNumber('d');
+                        break;
+                    case 'D':
+                        getName('D', s.dayNamesShort, s.dayNames);
+                        break;
+                    case 'o':
+                        doy = getNumber('o');
+                        break;
+                    case 'm':
+                        month = getNumber('m');
+                        break;
+                    case 'M':
+                        month = getName('M', s.monthNamesShort, s.monthNames);
+                        break;
+                    case 'y':
+                        year = getNumber('y');
+                        break;
+                    case 'H':
+                        hours = getNumber('H');
+                        break;
+                    case 'h':
+                        hours = getNumber('h');
+                        break;
+                    case 'i':
+                        minutes = getNumber('i');
+                        break;
+                    case 's':
+                        seconds = getNumber('s');
+                        break;
+                    case 'a':
+                        ampm = getName('a', [s.amText, s.pmText], [s.amText, s.pmText]) - 1;
+                        break;
+                    case 'A':
+                        ampm = getName('A', [s.amText, s.pmText], [s.amText, s.pmText]) - 1;
+                        break;
+                    case "'":
+                        if (lookAhead("'")) {
+                            checkLiteral();
+                        } else {
+                            literal = true;
+                        }
+                        break;
+                    default:
                         checkLiteral();
-                    } else {
-                        literal = true;
-                    }
-                    break;
-                default:
-                    checkLiteral();
                 }
             }
         }

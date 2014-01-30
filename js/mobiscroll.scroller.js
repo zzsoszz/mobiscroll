@@ -30,9 +30,8 @@
             that = this,
             e = elem,
             $elm = $(e),
-            s = extend({}, defaults),
+            s = extend({}, defaults, userdef),
             wheels = [],
-            wheelValues = [],
             elmList = [],
             isInput = $elm.is('input'),
             batchSize = 30,
@@ -46,10 +45,13 @@
 
         // Private functions
 
+        /*
+         * Calls handlers attached to an event.
+         */
         function event(name, args) {
             var ret;
             args.push(that);
-            $.each([theme, preset, settings], function (i, v) {
+            $.each([userdef, theme, preset, settings], function (i, v) {
                 if (v && v[name]) {
                     ret = v[name].apply(e, args);
                 }
@@ -57,6 +59,10 @@
             return ret;
         }
 
+        /*
+         * Generates wheel items between the given indexes.
+         * Indexes can be negative values also.
+         */
         function genWheelItems(wheel, first, last) {
             var i,
                 key,
@@ -74,8 +80,6 @@
                 value = (isArray ? $(values).get(i % length) : values(i));
                 key = (isArray ? $(keys).get(i % length) : keys(i));
 
-                wheelValues[wheel.index][l] = value;
-
                 // Don't generate values greater than min and max indexes
                 if ((wheel.min !== undefined && i < wheel.min) || (wheel.max !== undefined && i > wheel.max)) {
                     value = '';
@@ -92,7 +96,10 @@
             return html;// + '</div>';
         }
 
-        function getWheelKey(wheel) {
+        /*
+         * Returns the current value of the wheel.
+         */
+        function getWheelValue(wheel) {
             var index = wheel.selectedIndex,
                 values = wheel.values,
                 keys = wheel.keys || values;
@@ -100,7 +107,38 @@
             return $.isArray(keys) ? $(keys).get(index % keys.length) : keys(index);
         }
 
-        function getCurrPos(wheel) {
+        /*
+         * Returns the index of the given value on the wheel.
+         * In the case of infinite wheel, if the value can be present 
+         * multiple times, returns the closest to the current position of the wheel.
+         */
+        function getWheelIndex(wheel, value) {
+            var dist,
+                oldIndex,
+                selectedIndex,
+                keys = wheel.keys || wheel.values,
+                length = keys.length;
+
+            if ($.isArray(keys)) {
+                // Find the index of the value
+                selectedIndex = $.inArray(value, keys);
+                // If infinite, calculate the index of the nearest value
+                if (wheel.infinite && wheel.selectedIndex) {
+                    oldIndex = wheel.selectedIndex % length;
+                    oldIndex = oldIndex < 0 ? oldIndex + length : oldIndex;
+                    dist = oldIndex - selectedIndex;
+                    dist = Math.abs(dist) > length / 2 ? Math.abs(dist) - length : dist;
+                    return wheel.selectedIndex - dist;
+                }
+                return selectedIndex;
+            }
+            return wheel.indexes(value);
+        }
+
+        /*
+         * Returns the actual position of the wheel in pixels.
+         */
+        function getWheelPosition(wheel) {
             var target = wheel.$markup[0],
                 style = window.getComputedStyle ? getComputedStyle(target) : target.style,
                 matrix;
@@ -119,7 +157,10 @@
             return +style.top.replace('px', '');
         }
 
-        function scroll(wheel, px, time, active) {
+        /*
+         * Scrolls a wheel into the specified position.
+         */
+        function scroll(wheel, px, time) {
             var style = wheel.$markup[0].style;
 
             style[jsPrefix + 'Transition'] = prefix + 'transform ' + (time || 0) + 'ms ease-out';
@@ -155,64 +196,59 @@
         /*
          * Scroll all wheels to the selected values.
          */
-        function scrollToValues(time) {
-            var oldIndex,
-                selectedIndex,
-                keys;
-
-            var invalid = event('validate', [tempValues, wheelValues]);
+        function scrollToValues(time, index) {
+            var invalid = event('validate', [tempValues]);
 
             $.each(wheels, function (i, wheel) {
+                var diff,
+                    first,
+                    last;
+
                 // Check if wheel is already at the selected value
                 if (wheel.selectedValue !== tempValues[i]) {
+                    
                     keys = wheel.keys || wheel.values;
 
-                    // Search for the index of the selected value
-                    selectedIndex = $.isArray(keys) ? $.inArray(tempValues[i], keys) : wheel.indexes(tempValues[i]);
-                    //oldIndex = $.isArray(keys) ? $.inArray(wheel.selectedValue, keys) : wheel.indexes(wheel.selectedValue);
-
-                    wheel.selectedIndex += selectedIndex - oldIndex;
+                    wheel.selectedIndex = getWheelIndex(wheel, tempValues[i]);
                     wheel.selectedValue = tempValues[i];
 
                     // Scroll wheel in position
-                    scroll(wheel, -wheel.selectedIndex * wheelHeight, time);
+                    scroll(wheel, -wheel.selectedIndex * wheelHeight, i === index || index === undefined ? time : 100);
                 }
 
                 // Generate new values for infinite / circular wheel
-                var first = wheel.first,
-                    last = wheel.last,
-                    diff = wheel.infinite ? Math.round((wheel.lastPosition - wheel.position) / wheelHeight) : 0;
+                first = wheel.first;
+                last = wheel.last;
+                diff = wheel.infinite ? Math.round((wheel.lastPosition - wheel.position) / wheelHeight) : 0;
 
-                    wheel.first += diff;
-                    wheel.last += diff;
+                wheel.first += diff;
+                wheel.last += diff;
 
-                    wheel.lastPosition = wheel.position;
+                wheel.lastPosition = wheel.position;
 
-                    // Generate items
-                    setTimeout(function () {
-                        if (diff > 0) {
-                            wheel.$markup.append(genWheelItems(wheel, last + 1, last + diff));
-                            $('.mbsc-sc-itm', wheel.$markup).slice(0, diff).remove();
-                        } else if (diff < 0) {
-                            wheel.$markup.prepend(genWheelItems(wheel, first + diff, first - 1));
-                            $('.mbsc-sc-itm', wheel.$markup).slice(diff).remove();
-                        }
+                // Generate items
+                setTimeout(function () {
+                    if (diff > 0) {
+                        wheel.$markup.append(genWheelItems(wheel, last + 1, last + diff));
+                        $('.mbsc-sc-itm', wheel.$markup).slice(0, diff).remove();
+                    } else if (diff < 0) {
+                        wheel.$markup.prepend(genWheelItems(wheel, first + diff, first - 1));
+                        $('.mbsc-sc-itm', wheel.$markup).slice(diff).remove();
+                    }
 
-                        if (diff) {
-                            wheel.margin += diff * wheelHeight;
-                            wheel.$markup.css('margin-top', wheel.margin + 'px').find('.mbsc-sc-batch:empty').remove();
-                        }
+                    if (diff) {
+                        wheel.margin += diff * wheelHeight;
+                        wheel.$markup.css('margin-top', wheel.margin + 'px').find('.mbsc-sc-batch:empty').remove();
+                    }
 
-                        // Add invalid class to  invalid items
+                    // Add invalid class to  invalid items
+                    if (invalid) {
                         $('.mbsc-sc-itm', wheel.$markup).removeClass('mbsc-sc-itm-inv');
                         $.each(invalid[i], function (j, val) {
                             $('.mbsc-sc-itm[data-val="' + val + '"]', wheel.$markup).addClass('mbsc-sc-itm-inv');
                         });
-
-                    }, 10);
-
-                //if (i == 1)
-                //console.log(wheel.first, wheel.last, selectedIndex);
+                    }
+                }, 10);
             });
         }
 
@@ -275,7 +311,7 @@
                 wheelScrolled = currWheel.scrolling !== undefined;
 
                 // If moving, get actual position, otherwise the last save position
-                currPos = wheelScrolled ? getCurrPos(currWheel) : currWheel.position;
+                currPos = wheelScrolled ? getWheelPosition(currWheel) : currWheel.position;
                 endPos = startPos;
 
                 currWheel.lastPosition = currWheel.position;
@@ -374,10 +410,10 @@
 
                     // Set selected value
                     currWheel.selectedIndex = -currWheel.position / wheelHeight;
-                    currWheel.selectedValue = tempValues[currIndex] = getWheelKey(currWheel);
+                    currWheel.selectedValue = tempValues[currIndex] = getWheelValue(currWheel);
                     
                     // Validate and scroll to valid values (if validation changed something)
-                    scrollToValues(time);
+                    scrollToValues(time, currIndex);
                 }
 
                 if (ev.type === 'mouseup') {
@@ -599,7 +635,7 @@
             //}
 
             // Create wheels containers
-            html = '<div role="dialog" class="mbsc-sc-' + s.theme + ' dw-' + s.display + (prefix ? ' dw' + prefix.replace(/\-$/, '') : '') + (hasButtons ? '' : ' dw-nobtn') + '">' +
+            html = '<div role="dialog" class="mbsc-sc mbsc-sc-' + s.theme + ' dw-' + s.display + (prefix ? ' dw' + prefix.replace(/\-$/, '') : '') + (hasButtons ? '' : ' dw-nobtn') + '">' +
                 (!isModal ?
                     '<div class="dw dwbg dwi">' :
                     '<div class="dw-persp"><div class="dwo"></div><div class="dw dwbg"><div class="dw-arrw"><div class="dw-arrw-i"><div class="dw-arr"></div></div></div>') +
@@ -609,22 +645,24 @@
                 html += '<div class="dwc' + (s.mode != 'scroller' ? ' dwpm' : ' dwsc') + (s.showLabel ? '' : ' dwhl') + '"><div class="dwwc dwrc"><table cellpadding="0" cellspacing="0"><tr>';
                 $.each(wg, function (j, w) { // Wheels
                     wheels[nr] = w;
-                    wheelValues[nr] = [];
 
                     // Set wheel properties
+                    w.index = nr;
+
+                    w.selectedIndex = 0;
+                    w.selectedValue = tempValues[nr];
+                    w.selectedIndex = getWheelIndex(w, tempValues[nr]);
+
                     if (w.infinite) {
-                        w.first = -batchSize;
-                        w.last = batchSize;
+                        w.first = w.selectedIndex - batchSize;
+                        w.last = w.selectedIndex + batchSize;
                     } else {
                         w.first = 0;
                         w.last = w.values.length - 1;
                     }
 
-                    w.index = nr;
-                    w.position = 0;
-                    w.lastPosition = 0;
-                    w.selectedIndex = 0;
-                    w.selectedValue = tempValues[nr];
+                    w.position = w.lastPosition = -w.selectedIndex * wheelHeight;
+
                     w.margin = ((rowsNr - 1) / 2 + w.first) * wheelHeight;
 
                     lbl = w.label !== undefined ? w.label : j;
@@ -645,7 +683,6 @@
                     html += '</div><div class="dwwol"></div></div><div class="dwwo"></div></div><div class="dwwol"></div></div></td>';
                     nr++;
                 });
-
 
                 html += '</tr></table></div></div>';
             });
@@ -669,9 +706,10 @@
 
             $('.dw-ul', $markup).each(function (i, w) {
                 wheels[i].$markup = $(this);
-                scroll(wheels[i], 0);
+                scroll(wheels[i], wheels[i].position);
             });
 
+            // TODO: validate before generating markup?
             scrollToValues();
 
             event('onMarkupReady', [$markup]);
@@ -727,9 +765,9 @@
                 });
 
                 // Set position
-                that.position();
-                attachPosition('orientationchange.mbsc resize.mbsc', false);
-                attachPosition('scroll.mbsc', true);
+                //that.position();
+                //attachPosition('orientationchange.mbsc resize.mbsc', false);
+                //attachPosition('scroll.mbsc', true);
             }
 
             // Events
@@ -833,7 +871,7 @@
 
             event('onThemeLoad', [lang, settings]);
 
-            extend(s, theme, lang, settings);
+            extend(s, lang, theme, userdef, settings);
 
             // Add default buttons
             s.buttons = s.buttons || ['set', 'cancel'];
@@ -965,6 +1003,7 @@
         preventShow,
         ms = $.mobiscroll,
         instances = ms.instances,
+        userdef = ms.userdef,
         util = ms.util,
         prefix = util.prefix,
         jsPrefix = util.jsPrefix,
@@ -988,15 +1027,10 @@
             showLabel: true,
             wheels: [],
             theme: 'default',
-            selectedText: 'Selected',
-            closeText: 'Close',
             display: 'modal',
             mode: 'scroller',
             preset: '',
             lang: 'en-US',
-            setText: 'Set',
-            cancelText: 'Cancel',
-            clearText: 'Clear',
             context: 'body',
             scrollLock: true,
             tap: true,
@@ -1030,6 +1064,15 @@
                 return ret;
             }
         };
+
+    // English language module
+    ms.i18n.en = ms.i18n['en-US'] = {
+        setText: 'Set',
+        selectedText: 'Selected',
+        closeText: 'Close',
+        cancelText: 'Cancel',
+        clearText: 'Clear'
+    };
 
     // Prevent re-show on window focus
     $(window).on('focus', function () {
