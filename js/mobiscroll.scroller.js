@@ -68,7 +68,7 @@
                 key,
                 value,
                 l = 0,
-                html = '',//'<div class="mbsc-sc-batch">',
+                html = '<div class="mbsc-sc-batch">',
                 labels = wheel.labels || [],
                 values = wheel.values,
                 keys = wheel.keys || values,
@@ -76,7 +76,7 @@
                 length = values.length;
 
             for (i = first; i <= last; i++) {
-                // TODO: call values function only ones and should return the whole batch
+                // TODO: call values function only once and should return the whole batch
                 value = (isArray ? $(values).get(i % length) : values(i));
                 key = (isArray ? $(keys).get(i % length) : keys(i));
 
@@ -86,14 +86,14 @@
                 }
 
                 if (l % 20 == 0) {
-                    //html += '</div><div class="mbsc-sc-batch">';
+                    html += '</div><div class="mbsc-sc-batch">';
                 }
 
                 html += '<div data-i="' + i + '" data-val="' + key + '" role="option" class="mbsc-sc-itm"' + (labels[i] ? ' aria-label="' + labels[i] + '"' : '') + ' style="height:' + wheelHeight + 'px;"><div class="mbsc-sc-itm-i">' + value + '</div></div>';
                 l++;
             }
 
-            return html;// + '</div>';
+            return html + '</div>';
         }
 
         /*
@@ -139,9 +139,17 @@
          * Returns the actual position of the wheel in pixels.
          */
         function getWheelPosition(wheel) {
-            var target = wheel.$markup[0],
-                style = window.getComputedStyle ? getComputedStyle(target) : target.style,
-                matrix;
+            var matrix,
+                style,
+                target;
+
+            if (wheel.scrolling === undefined) {
+                return wheel.position;
+            }
+
+            target = wheel.$markup[0];
+            style = window.getComputedStyle ? getComputedStyle(target) : target.style;
+            matrix;
 
             if (has3d) {
                 $.each(['t', 'webkitT', 'MozT', 'OT', 'msT'], function (i, v) {
@@ -199,57 +207,66 @@
         function scrollToValues(time, index) {
             var invalid = event('validate', [tempValues]);
 
-            $.each(wheels, function (i, wheel) {
-                var diff,
-                    first,
-                    last;
+            if (isVisible) {
+                $.each(wheels, function (i, wheel) {
+                    var diff,
+                        first,
+                        last,
+                        newPos;
 
-                // Check if wheel is already at the selected value
-                if (wheel.selectedValue !== tempValues[i]) {
-                    
-                    keys = wheel.keys || wheel.values;
+                    // Check if wheel is already at the selected value
+                    if (wheel.selectedValue !== tempValues[i]) {
 
-                    wheel.selectedIndex = getWheelIndex(wheel, tempValues[i]);
-                    wheel.selectedValue = tempValues[i];
+                        keys = wheel.keys || wheel.values;
 
-                    // Scroll wheel in position
-                    scroll(wheel, -wheel.selectedIndex * wheelHeight, i === index || index === undefined ? time : 100);
-                }
+                        wheel.selectedIndex = getWheelIndex(wheel, tempValues[i]);
+                        wheel.selectedValue = tempValues[i];
 
-                // Generate new values for infinite / circular wheel
-                first = wheel.first;
-                last = wheel.last;
-                diff = wheel.infinite ? Math.round((wheel.lastPosition - wheel.position) / wheelHeight) : 0;
+                        newPos = -wheel.selectedIndex * wheelHeight;
 
-                wheel.first += diff;
-                wheel.last += diff;
+                        if (index !== undefined) {
+                            time = Math.round(Math.abs(getWheelPosition(wheel) - newPos) / wheelHeight * s.timeUnit);
+                        }
 
-                wheel.lastPosition = wheel.position;
-
-                // Generate items
-                setTimeout(function () {
-                    if (diff > 0) {
-                        wheel.$markup.append(genWheelItems(wheel, last + 1, last + diff));
-                        $('.mbsc-sc-itm', wheel.$markup).slice(0, diff).remove();
-                    } else if (diff < 0) {
-                        wheel.$markup.prepend(genWheelItems(wheel, first + diff, first - 1));
-                        $('.mbsc-sc-itm', wheel.$markup).slice(diff).remove();
+                        // Scroll wheel in position
+                        scroll(wheel, newPos, time);
                     }
 
-                    if (diff) {
-                        wheel.margin += diff * wheelHeight;
-                        wheel.$markup.css('margin-top', wheel.margin + 'px').find('.mbsc-sc-batch:empty').remove();
-                    }
+                    // Generate new values for infinite / circular wheel
+                    first = wheel.first;
+                    last = wheel.last;
+                    diff = wheel.infinite ? Math.round((wheel.lastPosition - wheel.position) / wheelHeight) : 0;
 
-                    // Add invalid class to  invalid items
-                    if (invalid) {
-                        $('.mbsc-sc-itm', wheel.$markup).removeClass('mbsc-sc-itm-inv');
-                        $.each(invalid[i], function (j, val) {
-                            $('.mbsc-sc-itm[data-val="' + val + '"]', wheel.$markup).addClass('mbsc-sc-itm-inv');
-                        });
-                    }
-                }, 10);
-            });
+                    wheel.first += diff;
+                    wheel.last += diff;
+
+                    wheel.lastPosition = wheel.position;
+
+                    // Generate items
+                    setTimeout(function () {
+                        if (diff > 0) {
+                            wheel.$markup.append(genWheelItems(wheel, last + 1, last + diff));
+                            $('.mbsc-sc-itm', wheel.$markup).slice(0, diff).remove();
+                        } else if (diff < 0) {
+                            wheel.$markup.prepend(genWheelItems(wheel, first + diff, first - 1));
+                            $('.mbsc-sc-itm', wheel.$markup).slice(diff).remove();
+                        }
+
+                        if (diff) {
+                            wheel.margin += diff * wheelHeight;
+                            wheel.$markup.css('margin-top', wheel.margin + 'px').find('.mbsc-sc-batch:empty').remove();
+                        }
+
+                        // Add invalid class to  invalid items
+                        if (invalid) {
+                            $('.mbsc-sc-itm', wheel.$markup).removeClass('mbsc-sc-itm-inv');
+                            $.each(invalid[i], function (j, val) {
+                                $('.mbsc-sc-itm[data-val="' + val + '"]', wheel.$markup).addClass('mbsc-sc-itm-inv');
+                            });
+                        }
+                    }, 10);
+                });
+            }
         }
 
         function readValue() {
@@ -311,7 +328,7 @@
                 wheelScrolled = currWheel.scrolling !== undefined;
 
                 // If moving, get actual position, otherwise the last save position
-                currPos = wheelScrolled ? getWheelPosition(currWheel) : currWheel.position;
+                currPos = getWheelPosition(currWheel);
                 endPos = startPos;
 
                 currWheel.lastPosition = currWheel.position;
@@ -368,6 +385,7 @@
                 min,
                 max,
                 momentum,
+                newIndex,
                 dist = endPos - startPos,
                 time = new Date() - startTime;
 
@@ -404,16 +422,20 @@
                     }
 
                     // Calculate moving time
-                    time = momentum ? Math.round(Math.abs(currWheel.position - newPos) / wheelHeight * s.timeUnit * 1000) : 100;
+                    time = momentum ? Math.round(Math.abs(currWheel.position - newPos) / wheelHeight * s.timeUnit) : 100;
 
                     scroll(currWheel, newPos, time);
 
-                    // Set selected value
-                    currWheel.selectedIndex = -currWheel.position / wheelHeight;
-                    currWheel.selectedValue = tempValues[currIndex] = getWheelValue(currWheel);
-                    
-                    // Validate and scroll to valid values (if validation changed something)
-                    scrollToValues(time, currIndex);
+                    newIndex = -currWheel.position / wheelHeight;
+
+                    if (newIndex !== currWheel.selectedIndex) {
+                        // Set selected value
+                        currWheel.selectedIndex = newIndex;
+                        currWheel.selectedValue = tempValues[currIndex] = getWheelValue(currWheel);
+
+                        // Validate and scroll to valid values (if validation changed something)
+                        scrollToValues(time, currIndex);
+                    }
                 }
 
                 if (ev.type === 'mouseup') {
@@ -421,6 +443,14 @@
                 }
 
                 action = false;
+            }
+        }
+
+        function onHide() {
+            $markup.remove();
+            if (activeElm) {
+                preventShow = true;
+                activeElm.focus();
             }
         }
 
@@ -635,7 +665,7 @@
             //}
 
             // Create wheels containers
-            html = '<div role="dialog" class="mbsc-sc mbsc-sc-' + s.theme + ' dw-' + s.display + (prefix ? ' dw' + prefix.replace(/\-$/, '') : '') + (hasButtons ? '' : ' dw-nobtn') + '">' +
+            html = '<div role="dialog" class="mbsc-sc mbsc-sc-in mbsc-sc-' + s.theme + ' dw-' + s.display + (prefix ? ' dw' + prefix.replace(/\-$/, '') : '') + (hasButtons ? '' : ' dw-nobtn') + '">' +
                 (!isModal ?
                     '<div class="dw dwbg dwi">' :
                     '<div class="dw-persp"><div class="dwo"></div><div class="dw dwbg"><div class="dw-arrw"><div class="dw-arrw-i"><div class="dw-arr"></div></div></div>') +
@@ -747,10 +777,11 @@
 
                 // Prevent scroll if not specified otherwise
                 if (s.scrollLock) {
-                    $markup.on('touchmove', function (e) {
-                        if (scrollLock) {
+                    //$markup.on('touchmove', function (e) {
+                    $wnd.on('touchstart.mbsc touchmove.mbsc', function (e) {
+                        //if (scrollLock) {
                             e.preventDefault();
-                        }
+                        //}
                     });
                 }
 
@@ -815,7 +846,7 @@
         * Hides the scroller instance.
         */
         that.hide = function (preventAnim, btn, force) {
-            var doAnim = isModal && animate && !preventAnim;
+            var doAnim = isModal && animate && has3d && !preventAnim;
 
             // If onClose handler returns false, prevent hide
             if (!isVisible || (!force && event('onClose', [valueText, btn]) === false)) {
@@ -835,18 +866,25 @@
 
             // Hide wheels and overlay
             if (doAnim) {
+                $markup.addClass('mbsc-sc-out');
                 //$markup.addClass('dw-trans').find('.dw').addClass('dw-' + animate + ' dw-out');
             }
+
             if (preventAnim) {
                 $markup.remove();
             } else {
-                setTimeout(function () {
-                    $markup.remove();
-                    if (activeElm) {
-                        preventShow = true;
-                        activeElm.focus();
-                    }
-                }, doAnim ? 350 : 1);
+                if (doAnim) {
+                    $markup.on(animEnd, onHide);
+                } else {
+                    onHide();
+                }
+                //setTimeout(function () {
+                //    $markup.remove();
+                //    if (activeElm) {
+                //        preventShow = true;
+                //        activeElm.focus();
+                //    }
+                //}, doAnim ? 350 : 1);
             }
 
             // Stop positioning on window resize
@@ -1001,6 +1039,8 @@
         tap,
         touch,
         preventShow,
+        animEnd = 'webkitAnimationEnd animationend',
+        transEnd = 'webkitTransitionEnd transitionend',
         ms = $.mobiscroll,
         instances = ms.instances,
         userdef = ms.userdef,
@@ -1036,7 +1076,7 @@
             tap: true,
             btnWidth: true,
             speedUnit: 0.0012,
-            timeUnit: 0.1,
+            timeUnit: 100,
             formatResult: function (d) {
                 return d.join(' ');
             },

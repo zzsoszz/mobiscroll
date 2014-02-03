@@ -2,10 +2,10 @@
 (function ($) {
 
     var ms = $.mobiscroll,
-        date = new Date(),
+        now = new Date(),
         defaults = {
-            startYear: date.getFullYear() - 100,
-            endYear: date.getFullYear() + 100,
+            startYear: now.getFullYear() - 100,
+            endYear: now.getFullYear() + 100,
             shortYearCutoff: '+10',
             stepHour: 1,
             stepMinute: 1,
@@ -28,7 +28,7 @@
                 if (def !== undefined) {
                     return def;
                 }
-                return defd[f[i]] ? defd[f[i]]() : f[i](defd);
+                return defaultDate[f[i]] ? defaultDate[f[i]]() : f[i](defaultDate);
             }
 
             function addWheel(wg, k, v, lbl, infinite, min, max, indexes) {
@@ -70,7 +70,7 @@
                 return new Date(get(d, 'y'), get(d, 'm'), get(d, 'd', 1), get(d, 'a', 0) ? hour + 12 : hour, get(d, 'i', 0), get(d, 's', 0));
             }
 
-            function getIndex(t, v) {
+            /*function getIndex(t, v) {
                 return $('.dw-li', t).index($('.dw-li[data-val="' + v + '"]', t));
             }
 
@@ -82,7 +82,7 @@
                     return $('.dw-li', t).length;
                 }
                 return getIndex(t, v) + add;
-            }
+            }*/
 
             var that = $(this),
                 html5def = {},
@@ -146,7 +146,7 @@
                 ampm = tord.match(/a/i),
                 hampm = tord.match(/h/),
                 hformat = p == 'datetime' ? s.dateFormat + s.separator + s.timeFormat : p == 'time' ? s.timeFormat : s.dateFormat,
-                defd = new Date(),
+                defaultDate = new Date(),
                 stepH = s.stepHour,
                 stepM = s.stepMinute,
                 stepS = s.stepSecond,
@@ -329,8 +329,76 @@
                     }
                     return result;
                 },
-                validate: function (dw, i, time, dir) {
-                    /*var temp = inst.temp, //.slice(0),
+                validate: function (values) {
+                    var i,
+                        curr,
+                        invalid = [],
+                        y = get(values, 'y'),
+                        m = get(values, 'm'),
+                        d = get(values, 'd'),
+                        daysInMonth = 32 - new Date(y, m, 32).getDate();
+
+                    // Check if day is in month
+                    if (daysInMonth < d) {
+                        values[1] = daysInMonth;
+                    }
+
+                    curr = getDate(values);
+
+                    // Check if in min/max range
+                    if (mind && curr < mind) {
+                        curr = mind;
+                    }
+
+                    if (maxd && curr > maxd) {
+                        curr = maxd;
+                    }
+
+                    // Check if valid
+                    // TODO ...
+
+                    // Set valid values to array
+                    for (i in o) {
+                        values[o[i]] = curr[f[i]] ? curr[f[i]]() : f[i](curr);
+                    }
+
+                    // Create invalid array
+                    for (i = 0; i < values.length; i++) {
+                        invalid[i] = [];
+                    }
+
+                    // Invalid months
+                    for (i = 0; i < 12; i++) {
+                        // Days < min date
+                        if (mind && curr.getFullYear() === mind.getFullYear() && i < mind.getMonth()) {
+                            invalid[o.m].push(i);
+                        }
+                        // Days > max date
+                        if (maxd && curr.getFullYear() === maxd.getFullYear() && i > maxd.getMonth()) {
+                            invalid[o.m].push(i);
+                        }
+                    }
+
+                    // Invalid days
+                    for (i = 1; i < 32; i++) {
+                        // Days outside of month
+                        if (i > daysInMonth) {
+                            invalid[o.d].push(i);
+                        }
+                        // Days < min date
+                        if (mind && curr.getFullYear() === mind.getFullYear() && curr.getMonth() === mind.getMonth() && i < mind.getDate()) {
+                            invalid[o.d].push(i);
+                        }
+                        // Days > max date
+                        if (maxd && curr.getFullYear() === maxd.getFullYear() && curr.getMonth() === maxd.getMonth() && i > maxd.getDate()) {
+                            invalid[o.d].push(i);
+                        }
+                    }
+
+                    return invalid;
+                }
+                /*validate: function (dw, i, time, dir) {
+                    var temp = inst.temp, //.slice(0),
                         mins = { y: mind.getFullYear(), m: 0, d: 1, h: 0, i: 0, s: 0, a: 0 },
                         maxs = { y: maxd.getFullYear(), m: 11, d: 31, h: step(hampm ? 11 : 23, stepH), i: step(59, stepM), s: step(59, stepS), a: 1 },
                         steps = { h: stepH, i: stepM, s: stepS, a: 1 },
@@ -536,14 +604,14 @@
                                 });
                             }
                         });
-                    }*/
-                }
+                    }
+                }*/
             };
         };
 
     ms.i18n.en = $.extend(ms.i18n.en, {
         dateFormat: 'mm/dd/yy',
-        dateOrder: 'mmddy',
+        dateOrder: 'mmddyy',
         timeWheels: 'hhiiA',
         timeFormat: 'hh:ii A',
         monthNames: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
