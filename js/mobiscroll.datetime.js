@@ -200,7 +200,7 @@
                             keys.push(i);
                             values.push(str.match(/MM/) ? str.replace(/MM/, '<span class="dw-mon">' + s.monthNames[i] + '</span>') : str.replace(/M/, '<span class="dw-mon">' + s.monthNamesShort[i] + '</span>'));
                         }
-                        addWheel(wg, keys, values, s.monthText, true);
+                        addWheel(wg, keys, values, s.monthText);
                     } else if (k == o.d) {
                         offset++;
                         values = [];
@@ -209,7 +209,7 @@
                             keys.push(i);
                             values.push(dord.match(/dd/i) && i < 10 ? '0' + i : i);
                         }
-                        addWheel(wg, keys, values, s.dayText, true);
+                        addWheel(wg, keys, values, s.dayText);
                     }
                 }
                 wheels.push(wg);
@@ -364,18 +364,20 @@
 
                     // Create invalid array
                     for (i = 0; i < values.length; i++) {
-                        invalid[i] = [];
+                        invalid[i] = {};
                     }
 
                     // Invalid months
                     for (i = 0; i < 12; i++) {
                         // Days < min date
                         if (mind && curr.getFullYear() === mind.getFullYear() && i < mind.getMonth()) {
-                            invalid[o.m].push(i);
+                            //invalid[o.m].push(i);
+                            invalid[o.m][i] = 1;
                         }
                         // Days > max date
                         if (maxd && curr.getFullYear() === maxd.getFullYear() && i > maxd.getMonth()) {
-                            invalid[o.m].push(i);
+                            //invalid[o.m].push(i);
+                            invalid[o.m][i] = 1;
                         }
                     }
 
@@ -383,15 +385,18 @@
                     for (i = 1; i < 32; i++) {
                         // Days outside of month
                         if (i > daysInMonth) {
-                            invalid[o.d].push(i);
+                            //invalid[o.d].push(i);
+                            invalid[o.d][i] = 1;
                         }
                         // Days < min date
                         if (mind && curr.getFullYear() === mind.getFullYear() && curr.getMonth() === mind.getMonth() && i < mind.getDate()) {
-                            invalid[o.d].push(i);
+                            //invalid[o.d].push(i);
+                            invalid[o.d][i] = 1;
                         }
                         // Days > max date
                         if (maxd && curr.getFullYear() === maxd.getFullYear() && curr.getMonth() === maxd.getMonth() && i > maxd.getDate()) {
-                            invalid[o.d].push(i);
+                            //invalid[o.d].push(i);
+                            invalid[o.d][i] = 1;
                         }
                     }
 

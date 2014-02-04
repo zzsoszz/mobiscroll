@@ -68,7 +68,7 @@
                 key,
                 value,
                 l = 0,
-                html = '<div class="mbsc-sc-batch">',
+                html = '',//'<div class="mbsc-sc-batch">',
                 labels = wheel.labels || [],
                 values = wheel.values,
                 keys = wheel.keys || values,
@@ -86,14 +86,14 @@
                 }
 
                 if (l % 20 == 0) {
-                    html += '</div><div class="mbsc-sc-batch">';
+                    //html += '</div><div class="mbsc-sc-batch">';
                 }
 
                 html += '<div data-i="' + i + '" data-val="' + key + '" role="option" class="mbsc-sc-itm"' + (labels[i] ? ' aria-label="' + labels[i] + '"' : '') + ' style="height:' + wheelHeight + 'px;"><div class="mbsc-sc-itm-i">' + value + '</div></div>';
                 l++;
             }
 
-            return html + '</div>';
+            return html;// + '</div>';
         }
 
         /*
@@ -224,8 +224,10 @@
 
                         newPos = -wheel.selectedIndex * wheelHeight;
 
-                        if (index !== undefined) {
+                        if (/*index !== undefined || */wheel.scrolling) {
                             time = Math.round(Math.abs(getWheelPosition(wheel) - newPos) / wheelHeight * s.timeUnit);
+                        } else if (index !== undefined) {
+                            time = 200;
                         }
 
                         // Scroll wheel in position
@@ -258,12 +260,27 @@
                         }
 
                         // Add invalid class to  invalid items
+                        //console.time('validate');
                         if (invalid) {
                             $('.mbsc-sc-itm', wheel.$markup).removeClass('mbsc-sc-itm-inv');
-                            $.each(invalid[i], function (j, val) {
+                            $.each(invalid[i], function (val) {
                                 $('.mbsc-sc-itm[data-val="' + val + '"]', wheel.$markup).addClass('mbsc-sc-itm-inv');
                             });
+                            /*if (wheel.invalid) {
+                                $.each(wheel.invalid, function (j, itm) {
+                                    if (!invalid[i][itm.attr('data-val')]) {
+                                        itm.removeClass('mbsc-sc-itm-inv');
+                                    }
+                                });
+                            }
+                            
+                            wheel.invalid = [];
+
+                            $.each(invalid[i], function (val) {
+                                wheel.invalid.push($('.mbsc-sc-itm[data-val="' + val + '"]', wheel.$markup).addClass('mbsc-sc-itm-inv'));
+                            });*/
                         }
+                        //console.timeEnd('validate');
                     }, 10);
                 });
             }
