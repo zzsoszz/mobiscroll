@@ -200,7 +200,7 @@
                             keys.push(i);
                             values.push(str.match(/MM/) ? str.replace(/MM/, '<span class="dw-mon">' + s.monthNames[i] + '</span>') : str.replace(/M/, '<span class="dw-mon">' + s.monthNamesShort[i] + '</span>'));
                         }
-                        addWheel(wg, keys, values, s.monthText);
+                        addWheel(wg, keys, values, s.monthText, true);
                     } else if (k == o.d) {
                         offset++;
                         values = [];
@@ -209,7 +209,7 @@
                             keys.push(i);
                             values.push(dord.match(/dd/i) && i < 10 ? '0' + i : i);
                         }
-                        addWheel(wg, keys, values, s.dayText);
+                        addWheel(wg, keys, values, s.dayText, true);
                     }
                 }
                 wheels.push(wg);

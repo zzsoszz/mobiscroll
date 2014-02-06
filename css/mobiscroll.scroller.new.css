@@ -58,10 +58,13 @@
     position: relative;
     z-index: 2;
     -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
 }
 .mbsc-sc-batch {
     -webkit-backface-visibility: hidden;
     -webkit-perspective: 1000px;
+    backface-visibility: hidden;
+    perspective: 1000px;
 }
 /* Buttons */
 .dwbc {
