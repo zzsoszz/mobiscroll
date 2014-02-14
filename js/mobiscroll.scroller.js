@@ -93,7 +93,7 @@
                 l++;
             }
 
-            return html;// + '</div>';
+            return html// + '</div>';
         }
 
         /*
@@ -216,7 +216,6 @@
 
                     // Check if wheel is already at the selected value
                     if (wheel.selectedValue !== tempValues[i]) {
-
                         keys = wheel.keys || wheel.values;
 
                         wheel.selectedIndex = getWheelIndex(wheel, tempValues[i]);
@@ -257,6 +256,7 @@
                         if (diff) {
                             wheel.margin += diff * wheelHeight;
                             wheel.$markup.css('margin-top', wheel.margin + 'px').find('.mbsc-sc-batch:empty').remove();
+                            //wheel.$markupi[0].style['-webkit-transform'] = 'translate3d(0,' + wheel.margin + 'px,0)';
                         }
 
                         // Add invalid class to  invalid items
@@ -266,19 +266,20 @@
                             $.each(invalid[i], function (val) {
                                 $('.mbsc-sc-itm[data-val="' + val + '"]', wheel.$markup).addClass('mbsc-sc-itm-inv');
                             });
-                            /*if (wheel.invalid) {
-                                $.each(wheel.invalid, function (j, itm) {
-                                    if (!invalid[i][itm.attr('data-val')]) {
-                                        itm.removeClass('mbsc-sc-itm-inv');
-                                    }
-                                });
-                            }
-                            
-                            wheel.invalid = [];
 
-                            $.each(invalid[i], function (val) {
-                                wheel.invalid.push($('.mbsc-sc-itm[data-val="' + val + '"]', wheel.$markup).addClass('mbsc-sc-itm-inv'));
-                            });*/
+                            //if (wheel.invalid) {
+                            //    $.each(wheel.invalid, function (j, itm) {
+                            //        if (!invalid[i][itm.attr('data-val')]) {
+                            //            itm.removeClass('mbsc-sc-itm-inv');
+                            //        }
+                            //    });
+                            //}
+                            
+                            //wheel.invalid = [];
+
+                            //$.each(invalid[i], function (val) {
+                            //    wheel.invalid.push($('.mbsc-sc-itm[data-val="' + val + '"]', wheel.$markup).addClass('mbsc-sc-itm-inv'));
+                            //});
                         }
                         //console.timeEnd('validate');
                     }, 10);
@@ -724,6 +725,8 @@
                                     (s.minWidth ? ('min-width:' + (s.minWidth[nr] || s.minWidth) + 'px;') : 'min-width:' + s.width + 'px;') +
                                     (s.maxWidth ? ('max-width:' + (s.maxWidth[nr] || s.maxWidth) + 'px;') : '')) + '">' +
                                 '<div class="dw-ul" style="margin-top:' + w.margin + 'px;">';
+                                //'<div class="dw-ul-o">' +
+                                    //'<div class="dw-ul">';
 
                     // Generate wheel items
                     html += genWheelItems(w, w.first, w.last);
@@ -753,6 +756,8 @@
 
             $('.dw-ul', $markup).each(function (i, w) {
                 wheels[i].$markup = $(this);
+                //wheels[i].$markupi = $(this).parent();
+                //wheels[i].$markupi[0].style['-webkit-transform'] = 'translate3d(0,' + wheels[i].margin + 'px,0)';
                 scroll(wheels[i], wheels[i].position);
             });
 

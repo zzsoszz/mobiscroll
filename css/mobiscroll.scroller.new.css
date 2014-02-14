@@ -54,7 +54,8 @@
     position: relative;
 }
 /* Wheel item list */
-.dw-ul {
+.dw-ul,
+.dw-ul-o {
     position: relative;
     z-index: 2;
     -webkit-backface-visibility: hidden;
@@ -162,7 +163,8 @@
 }
 /* Invalid wheel items */
 .mbsc-sc-default .mbsc-sc-itm-inv {
-    opacity: .3;
+    /*opacity: .3;*/
+    color: #888;
 }
 /* Buttons */
 .mbsc-sc-default .dwb {
