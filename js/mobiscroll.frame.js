@@ -320,6 +320,10 @@
 
             wndWidth = nw;
             wndHeight = nh;
+            
+            if (that._onPosition) {
+                that._onPosition($markup);
+            }
         };
 
         /**
